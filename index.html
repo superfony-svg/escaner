@@ -27,8 +27,8 @@
     <h1>Inventario Dogma</h1>
     <div id="reader"></div>
     
-    <input type="text" id="codigo" placeholder="Esperando escaneo..." readonly>
-    <input type="number" id="cantidad" value="1" placeholder="Cantidad">
+    <input type="text" id="codigo" placeholder="Escaneando..." readonly>
+    <input type="number" id="cantidad" placeholder="Pon aquí la cantidad">
     
     <button class="btn-reg" onclick="registrar()">📥 Registrar</button>
     <button class="btn-excel" onclick="exportar()">🍏 Exportar a EXCEL</button>
@@ -52,10 +52,8 @@
             { fps: 10, qrbox: { width: 250, height: 100 } },
             (decodedText) => {
                 document.getElementById('codigo').value = decodedText;
-                // Pitido de aviso al escanear
+                // Solo pita, no registra nada por su cuenta
                 new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
-                document.getElementById('cantidad').focus();
-                document.getElementById('cantidad').select();
             }
         ).catch(err => { console.error(err); });
     };
@@ -63,7 +61,9 @@
     function registrar() {
         let cod = document.getElementById('codigo').value.trim();
         let cant = parseInt(document.getElementById('cantidad').value);
-        if (!cod || isNaN(cant)) return alert("Pon un código y una cantidad");
+        
+        if (!cod) return alert("Escanea un código primero");
+        if (isNaN(cant) || cant <= 0) return alert("Pon una cantidad válida");
 
         let existente = inventario.find(item => item.Codigo === cod);
         if (existente) {
@@ -74,7 +74,7 @@
         localStorage.setItem('datos_inv', JSON.stringify(inventario));
         
         document.getElementById('codigo').value = '';
-        document.getElementById('cantidad').value = '1';
+        document.getElementById('cantidad').value = '';
         actualizarTabla();
     }
 
