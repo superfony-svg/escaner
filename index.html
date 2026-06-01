@@ -2,36 +2,39 @@
 <html lang="es" translate="no">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventario Dogma</title>
+    <title>Inventario Dogma Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; padding: 10px; background-color: #f4f4f9; text-align: center; }
-        .container { max-width: 100%; width: 100%; margin: 0 auto; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; padding: 10px; background-color: #f4f4f9; text-align: center; }
+        .container { max-width: 400px; margin: 0 auto; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         
-        /* Mantenemos tu configuración de cámara que ya funciona */
-        #reader { width: 100%; background: #000; border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
-        
-        input { width: 100%; padding: 15px; margin: 5px 0; border: 2px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 18px; text-align: center; }
+        #reader { width: 100%; background: #000; border-radius: 8px; margin-bottom: 10px; }
+        input { width: 100%; padding: 12px; margin: 5px 0; border: 2px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 18px; text-align: center; }
         button { width: 100%; padding: 15px; margin: 5px 0; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; color: white; cursor: pointer; }
+        
+        .btn-reg { background-color: #28a745; }
         .btn-excel { background-color: #ffc107; color: black; }
         .btn-clear { background-color: #dc3545; }
         
-        table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 14px; background: white; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <h1>Inventario Dogma</h1>
     <div id="reader"></div>
-    <input type="text" id="codigo" placeholder="Esperando código..." readonly>
     
+    <input type="text" id="codigo" placeholder="Esperando escaneo..." readonly>
+    <input type="number" id="cantidad" value="1" placeholder="Cantidad">
+    
+    <button class="btn-reg" onclick="registrar()">📥 Registrar</button>
     <button class="btn-excel" onclick="exportar()">🍏 Exportar a EXCEL</button>
     <button class="btn-clear" onclick="borrarTodo()">🧹 Borrar todo</button>
 
-    <h3>Total registros: <span id="total">0</span></h3>
+    <h3>Registros: <span id="total">0</span></h3>
     <table id="tablaInventario">
         <thead><tr><th>Código</th><th>Cant.</th></tr></thead>
         <tbody></tbody>
@@ -44,28 +47,34 @@
 
     window.onload = function() {
         actualizarTabla();
-        // Cámara intacta
         html5QrCode.start(
             { facingMode: "environment" }, 
             { fps: 10, qrbox: { width: 250, height: 100 } },
             (decodedText) => {
-                // Pitido de confirmación
-                const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-                audio.play();
-                
-                registrarAutomatico(decodedText);
+                document.getElementById('codigo').value = decodedText;
+                // Pitido de aviso al escanear
+                new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
+                document.getElementById('cantidad').focus();
+                document.getElementById('cantidad').select();
             }
         ).catch(err => { console.error(err); });
     };
 
-    function registrarAutomatico(cod) {
+    function registrar() {
+        let cod = document.getElementById('codigo').value.trim();
+        let cant = parseInt(document.getElementById('cantidad').value);
+        if (!cod || isNaN(cant)) return alert("Pon un código y una cantidad");
+
         let existente = inventario.find(item => item.Codigo === cod);
         if (existente) {
-            existente.Cantidad += 1;
+            existente.Cantidad += cant;
         } else {
-            inventario.push({ Codigo: cod, Cantidad: 1 });
+            inventario.push({ Codigo: cod, Cantidad: cant });
         }
         localStorage.setItem('datos_inv', JSON.stringify(inventario));
+        
+        document.getElementById('codigo').value = '';
+        document.getElementById('cantidad').value = '1';
         actualizarTabla();
     }
 
@@ -76,7 +85,6 @@
             tbody.innerHTML += `<tr><td>${item.Codigo}</td><td>${item.Cantidad}</td></tr>`;
         });
         document.getElementById('total').innerText = inventario.length;
-        document.getElementById('codigo').value = inventario.length > 0 ? inventario[inventario.length-1].Codigo : "";
     }
 
     function exportar() {
