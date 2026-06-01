@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Inventario Dogma</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        #reader { width: 100%; max-width: 500px; margin: 0 auto; background: #000; }
+        #resultado { margin-top: 20px; font-size: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Escáner Dogma</h1>
+    <div id="reader"></div>
+    <div id="resultado">Esperando código...</div>
+
+    <script>
+        const html5QrCode = new Html5Qrcode("reader");
+        
+        // Iniciamos la cámara
+        html5QrCode.start(
+            { facingMode: "environment" }, 
+            { fps: 10, qrbox: { width: 250, height: 100 } },
+            (decodedText) => {
+                document.getElementById('resultado').innerText = "Código: " + decodedText;
+                // Vibración (si el móvil lo permite)
+                if (navigator.vibrate) navigator.vibrate(200);
+            }
+        ).catch(err => {
+            document.getElementById('resultado').innerText = "Error: " + err;
+        });
+    </script>
+</body>
+</html>
