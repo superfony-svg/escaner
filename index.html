@@ -8,15 +8,12 @@
     <style>
         body { font-family: Arial, sans-serif; padding: 10px; background-color: #f4f4f9; text-align: center; }
         .container { max-width: 400px; margin: 0 auto; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        
         #reader { width: 100%; background: #000; border-radius: 8px; margin-bottom: 10px; }
         input { width: 100%; padding: 12px; margin: 5px 0; border: 2px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 18px; text-align: center; }
         button { width: 100%; padding: 15px; margin: 5px 0; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; color: white; cursor: pointer; }
-        
         .btn-reg { background-color: #28a745; }
         .btn-excel { background-color: #ffc107; color: black; }
         .btn-clear { background-color: #dc3545; }
-        
         table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     </style>
@@ -27,8 +24,8 @@
     <h1>Inventario Dogma</h1>
     <div id="reader"></div>
     
-    <input type="text" id="codigo" placeholder="Escaneando..." readonly>
-    <input type="number" id="cantidad" placeholder="Pon aquí la cantidad">
+    <input type="text" id="codigo" placeholder="Esperando escaneo..." readonly>
+    <input type="number" id="cantidad" placeholder="Cantidad">
     
     <button class="btn-reg" onclick="registrar()">📥 Registrar</button>
     <button class="btn-excel" onclick="exportar()">🍏 Exportar a EXCEL</button>
@@ -43,6 +40,7 @@
 
 <script>
     let inventario = JSON.parse(localStorage.getItem('datos_inv')) || [];
+    let bloqueado = false;
     const html5QrCode = new Html5Qrcode("reader");
 
     window.onload = function() {
@@ -51,9 +49,17 @@
             { facingMode: "environment" }, 
             { fps: 10, qrbox: { width: 250, height: 100 } },
             (decodedText) => {
+                if (bloqueado) return; // Si está bloqueado, ignorar
+                
+                bloqueado = true; // Bloqueamos el escáner
                 document.getElementById('codigo').value = decodedText;
-                // Solo pita, no registra nada por su cuenta
-                new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
+                
+                // Pitido de "Código Detectado" (Grave)
+                let audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+                audio.playbackRate = 0.5; 
+                audio.play();
+                
+                document.getElementById('cantidad').focus();
             }
         ).catch(err => { console.error(err); });
     };
@@ -63,18 +69,24 @@
         let cant = parseInt(document.getElementById('cantidad').value);
         
         if (!cod) return alert("Escanea un código primero");
-        if (isNaN(cant) || cant <= 0) return alert("Pon una cantidad válida");
+        if (isNaN(cant) || cant <= 0) return alert("Pon una cantidad");
 
+        // Registrar
         let existente = inventario.find(item => item.Codigo === cod);
-        if (existente) {
-            existente.Cantidad += cant;
-        } else {
-            inventario.push({ Codigo: cod, Cantidad: cant });
-        }
+        if (existente) existente.Cantidad += cant;
+        else inventario.push({ Codigo: cod, Cantidad: cant });
+        
         localStorage.setItem('datos_inv', JSON.stringify(inventario));
         
+        // Pitido de "Registrado con éxito" (Agudo)
+        let audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+        audio.playbackRate = 2.0; 
+        audio.play();
+        
+        // Limpiar y DESBLOQUEAR
         document.getElementById('codigo').value = '';
         document.getElementById('cantidad').value = '';
+        bloqueado = false; 
         actualizarTabla();
     }
 
@@ -94,7 +106,7 @@
     }
 
     function borrarTodo() {
-        if(confirm('¿Borrar todo el inventario?')) {
+        if(confirm('¿Borrar todo?')) {
             inventario = [];
             localStorage.removeItem('datos_inv');
             location.reload();
