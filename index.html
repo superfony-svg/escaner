@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Inventario Dogma — Escáner Profesional</title>
+<title>Inventario Dogma — Escáner + Maestro CSV</title>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
@@ -21,12 +21,18 @@
   table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
   th,td{border:1px solid #eaeaea;padding:8px;text-align:left}
   th{background:#fafafa}
+  #csvStatus{margin-top:6px;color:#555;font-size:14px;min-height:18px}
   @media(max-width:520px){#videoWrap{height:220px}}
 </style>
 </head>
 <body>
 <div class="card">
   <h2>Inventario Dogma — Escáner</h2>
+
+  <!-- CARGA DE MAESTRO CSV -->
+  <label for="csvInput"><strong>📤 Cargar maestro de artículos (CSV)</strong></label>
+  <input type="file" id="csvInput" accept=".csv">
+  <div id="csvStatus"></div>
 
   <div id="videoWrap">
     <video id="video" autoplay playsinline muted></video>
@@ -56,37 +62,95 @@
   </div>
 
   <table id="tablaInventario">
-    <thead><tr><th>Código</th><th>Cantidad</th></tr></thead>
+    <thead><tr><th>Código</th><th>Descripción</th><th>Cantidad</th></tr></thead>
     <tbody></tbody>
   </table>
 </div>
 
 <script>
+/* ============================
+   VARIABLES GENERALES
+   ============================ */
 let video = document.getElementById('video');
 let indicator = document.getElementById('indicator');
 let codigoHidden = document.getElementById('codigoHidden');
 let cantidadEl = document.getElementById('cantidad');
+let csvStatus = document.getElementById('csvStatus');
 
 let inventario = JSON.parse(localStorage.getItem('datos_inv')) || [];
+let maestro = {}; // maestro[codigo] = { descripcion }
+
 let stream = null;
 let scanning = false;
 let lastDecoded = null;
 let lastTime = 0;
 const DEBOUNCE = 1000;
 
+/* ============================
+   UTILIDADES
+   ============================ */
 function vibrar(){ if(navigator.vibrate) navigator.vibrate(60); }
 function beep(){ try{ new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play(); }catch(e){} }
+function beepError(){ try{ new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play(); }catch(e){} }
 
 function actualizarTabla(){
   const tbody = document.querySelector('#tablaInventario tbody');
   tbody.innerHTML = '';
   [...inventario].slice().reverse().forEach(i=>{
-    tbody.innerHTML += `<tr><td>${i.Codigo}</td><td>${i.Cantidad}</td></tr>`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i.Codigo}</td><td>${i.Descripcion || ""}</td><td>${i.Cantidad}</td>`;
+    tbody.appendChild(tr);
   });
   document.getElementById('totalReg').textContent = inventario.length;
   document.getElementById('sumaTotal').textContent = inventario.reduce((a,b)=>a+Number(b.Cantidad),0);
 }
 
+/* ============================
+   CARGA DE MAESTRO CSV
+   Formato: codigo,descripcion
+   ============================ */
+document.getElementById('csvInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    const text = evt.target.result;
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if(!lines.length){
+      csvStatus.textContent = "❌ El archivo está vacío";
+      return;
+    }
+
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const idxCodigo = header.indexOf('codigo');
+    const idxDesc   = header.indexOf('descripcion');
+
+    if(idxCodigo === -1 || idxDesc === -1){
+      csvStatus.textContent = "❌ El CSV debe tener columnas: codigo, descripcion";
+      maestro = {};
+      return;
+    }
+
+    maestro = {};
+    for(let i=1; i<lines.length; i++){
+      const row = lines[i].split(',');
+      if(row.length < 2) continue;
+      const codigo = row[idxCodigo].trim();
+      const descripcion = row[idxDesc].trim();
+      if(!codigo) continue;
+      maestro[codigo] = { descripcion };
+    }
+
+    csvStatus.textContent = `✔️ Maestro cargado: ${Object.keys(maestro).length} artículos`;
+  };
+
+  reader.readAsText(file, 'UTF-8');
+});
+
+/* ============================
+   CÁMARA Y ESCANEO
+   ============================ */
 async function stopStream(){
   if(stream){
     stream.getTracks().forEach(t=>t.stop());
@@ -111,12 +175,11 @@ async function startRearCamera(){
     const tmp = await navigator.mediaDevices.getUserMedia({video:true});
     tmp.getTracks().forEach(t=>t.stop());
   }catch(e){
-    indicator.textContent="Permiso denegado";
+    indicator.textContent="Permiso de cámara denegado";
     return;
   }
 
   const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
-
   const rear = devices.filter(d=>/back|rear|environment|trasera|posterior/i.test(d.label));
   const ordered = [...rear, ...devices];
 
@@ -164,27 +227,53 @@ async function processLoop(){
   requestAnimationFrame(processLoop);
 }
 
+/* ============================
+   MANEJO DEL CÓDIGO DETECTADO
+   ============================ */
 function handleDecoded(text){
   const now = Date.now();
-  if(text===lastDecoded && now-lastTime<DEBOUNCE) return;
-  lastDecoded=text;
-  lastTime=now;
+  if(text === lastDecoded && now - lastTime < DEBOUNCE) return;
 
-  codigoHidden.value="***"; // oculto
-  indicator.textContent="Código detectado";
-  beep(); vibrar();
+  // Validar contra maestro
+  if(!maestro[text]){
+    indicator.textContent = "❌ Artículo no encontrado";
+    vibrar();
+    beepError();
+    lastDecoded = null;
+    codigoHidden.value = "";
+    return;
+  }
+
+  lastDecoded = text;
+  lastTime = now;
+  codigoHidden.value = "***"; // oculto
+  indicator.textContent = "Código detectado";
+  beep();
+  vibrar();
 }
 
+/* ============================
+   REGISTRO DE INVENTARIO
+   ============================ */
 document.getElementById('btnRegistrar').addEventListener('click',()=>{
   const cod = lastDecoded;
   const cant = parseInt(cantidadEl.value,10);
 
-  if(!cod) return alert("Escanea un código primero");
+  if(!cod) return alert("Escanea un código válido primero");
   if(!cant || cant<=0) return alert("Cantidad inválida");
 
+  const desc = maestro[cod] ? maestro[cod].descripcion : "";
+
   const ex = inventario.find(i=>i.Codigo===cod);
-  if(ex) ex.Cantidad += cant;
-  else inventario.push({Codigo:cod,Cantidad:cant});
+  if(ex){
+    ex.Cantidad += cant;
+  } else {
+    inventario.push({
+      Codigo: cod,
+      Descripcion: desc,
+      Cantidad: cant
+    });
+  }
 
   localStorage.setItem('datos_inv',JSON.stringify(inventario));
 
@@ -195,9 +284,13 @@ document.getElementById('btnRegistrar').addEventListener('click',()=>{
   indicator.textContent="Escaneando…";
 
   actualizarTabla();
-  beep(); vibrar();
+  beep();
+  vibrar();
 });
 
+/* ============================
+   BOTONES: PAUSAR, EXPORTAR, BORRAR
+   ============================ */
 document.getElementById('btnToggle').addEventListener('click',()=>{
   if(scanning){
     stopStream();
@@ -209,16 +302,16 @@ document.getElementById('btnToggle').addEventListener('click',()=>{
 });
 
 document.getElementById('btnClear').addEventListener('click',()=>{
-  if(!confirm("¿Borrar todo?")) return;
+  if(!confirm("¿Borrar todo el inventario?")) return;
   inventario=[];
   localStorage.removeItem('datos_inv');
   actualizarTabla();
 });
 
 document.getElementById('btnExport').addEventListener('click',()=>{
-  if(!inventario.length) return alert("No hay datos");
-  const header=["Codigo","Cantidad"];
-  const rows=inventario.map(i=>[i.Codigo,i.Cantidad]);
+  if(!inventario.length) return alert("No hay datos para exportar");
+  const header=["Codigo","Descripcion","Cantidad"];
+  const rows=inventario.map(i=>[i.Codigo, i.Descripcion || "", i.Cantidad]);
   const csv=[header,...rows].map(r=>r.join(",")).join("\n");
   const blob=new Blob([csv],{type:"text/csv"});
   const url=URL.createObjectURL(blob);
@@ -229,6 +322,10 @@ document.getElementById('btnExport').addEventListener('click',()=>{
   URL.revokeObjectURL(url);
 });
 
+/* ============================
+   INICIO
+   ============================ */
+actualizarTabla();
 startRearCamera();
 </script>
 </body>
