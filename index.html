@@ -1,81 +1,242 @@
 <!doctype html>
-<html lang="es">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Diagnóstico Cámara</title></head>
+<html lang="es" translate="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Inventario Dogma - Cámara Trasera (Android)</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
+
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f9;color:#222;padding:12px}
+    .wrap{max-width:520px;margin:0 auto;background:#fff;padding:14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+    #reader{width:100%;height:320px;background:#000;color:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+    pre#log{white-space:pre-wrap;background:#fafafa;border:1px solid #eee;padding:8px;border-radius:6px;max-height:160px;overflow:auto}
+    label{display:block;margin-top:8px;font-weight:600}
+    input[type="text"], input[type="number"]{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;margin-top:6px;box-sizing:border-box}
+    .row{display:flex;gap:8px;margin-top:10px}
+    button{flex:1;padding:12px;border-radius:6px;border:0;font-weight:700;color:#fff;cursor:pointer}
+    .btn-green{background:#28a745}.btn-yellow{background:#f0ad4e;color:#000}.btn-red{background:#dc3545}.btn-blue{background:#007bff}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
+    th,td{border:1px solid #eaeaea;padding:8px;text-align:left}
+    th{background:#fafafa}
+    @media(max-width:520px){#reader{height:240px}}
+  </style>
+</head>
 <body>
-  <h2>Diagnóstico Cámara Android</h2>
-  <div id="reader" style="width:100%;height:220px;background:#000;color:#fff;display:flex;align-items:center;justify-content:center">Iniciando cámara...</div>
-  <pre id="log" style="white-space:pre-wrap;padding:8px;border:1px solid #ddd;margin-top:8px;"></pre>
+  <div class="wrap" role="main" aria-labelledby="title">
+    <h1 id="title">Inventario Dogma - Android</h1>
+
+    <div id="reader" aria-live="polite">Iniciando cámara...</div>
+    <pre id="log"></pre>
+
+    <label for="forceDevice">DeviceId (opcional, pegar aquí para forzar cámara)</label>
+    <input id="forceDevice" type="text" placeholder="Dejar vacío para selección automática">
+
+    <label for="codigo">Código escaneado</label>
+    <input id="codigo" type="text" readonly placeholder="Esperando escaneo...">
+
+    <label for="cantidad">Cantidad</label>
+    <input id="cantidad" type="number" min="1" placeholder="Cantidad">
+
+    <div class="row">
+      <button id="btnRegistrar" class="btn-green">📥 Registrar</button>
+      <button id="btnToggle" class="btn-blue">⏸️ Pausar</button>
+    </div>
+
+    <div class="row">
+      <button id="btnExport" class="btn-yellow">🍏 Exportar a EXCEL</button>
+      <button id="btnClear" class="btn-red">🧹 Borrar todo</button>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;margin-top:10px">
+      <div><strong>Registros:</strong> <span id="totalReg">0</span></div>
+      <div><strong>Total Cantidad:</strong> <span id="sumaTotal">0</span></div>
+    </div>
+
+    <table id="tablaInventario" aria-label="Tabla de inventario">
+      <thead><tr><th>Código</th><th>Cantidad</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
 <script>
+/* Variables */
+let inventario = JSON.parse(localStorage.getItem('datos_inv')) || [];
+let html5QrCode = null;
+let scannerActivo = false;
+let lastDecoded = null;
+let lastTime = 0;
+const DEBOUNCE_MS = 1200;
 const logEl = document.getElementById('log');
 const readerEl = document.getElementById('reader');
-function log(msg){ const t = new Date().toLocaleTimeString() + ' — ' + msg + '\\n'; logEl.textContent = t + logEl.textContent; console.log(msg); }
 
-async function runDiagnostic(){
-  log('Comprobando soporte navigator.mediaDevices...');
+/* Util: log en pantalla */
+function log(msg){
+  const t = new Date().toLocaleTimeString();
+  logEl.textContent = `${t} — ${msg}\n` + logEl.textContent;
+  console.log(msg);
+}
+
+/* Inicialización UI */
+window.addEventListener('load', () => {
+  actualizarTabla();
+  document.getElementById('btnRegistrar').addEventListener('click', registrar);
+  document.getElementById('btnExport').addEventListener('click', exportar);
+  document.getElementById('btnClear').addEventListener('click', borrarTodo);
+  document.getElementById('btnToggle').addEventListener('click', toggleScanner);
+  document.getElementById('cantidad').addEventListener('keydown', e => { if (e.key === 'Enter') registrar(); });
+
+  // Pedir permiso primero para que enumerateDevices muestre labels
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    readerEl.textContent = 'API getUserMedia no soportada';
-    log('getUserMedia no soportada en este navegador');
+    readerEl.textContent = 'getUserMedia no soportado';
+    log('API getUserMedia no soportada en este navegador');
     return;
   }
 
-  // 1) Intento simple para forzar permiso y ver error
-  try {
-    log('Solicitando permiso de cámara (getUserMedia simple)...');
-    const s = await navigator.mediaDevices.getUserMedia({ video: true });
-    s.getTracks().forEach(t => t.stop());
-    log('Permiso concedido y stream detenido correctamente');
-  } catch (e) {
-    log('Error en getUserMedia simple: ' + e.name + ' — ' + e.message);
-    readerEl.textContent = 'Error getUserMedia: ' + e.name;
-    // No return: seguimos para listar dispositivos
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(s => { s.getTracks().forEach(t => t.stop()); iniciarScannerTrasera(); })
+    .catch(e => {
+      readerEl.textContent = 'Permiso denegado o cámara no disponible';
+      log('getUserMedia inicial falló: ' + e.name + ' — ' + e.message);
+    });
+
+  window.addEventListener('beforeunload', detenerScannerSilencioso);
+});
+
+/* Iniciar scanner: facingMode -> fallback deviceId -> manual override */
+async function iniciarScannerTrasera() {
+  const forced = document.getElementById('forceDevice').value.trim();
+  if (forced) {
+    log('Se usará deviceId forzado por el usuario');
+    return iniciarConDeviceId(forced);
   }
 
-  // 2) Enumerar dispositivos
+  // 1) Intento con facingMode: environment (ideal)
   try {
-    log('Enumerando dispositivos...');
+    if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess,
+      onScanFailure
+    );
+    scannerActivo = true;
+    readerEl.textContent = 'Escanea un código (trasera)';
+    document.getElementById('btnToggle').textContent = '⏸️ Pausar';
+    log('Cámara iniciada con facingMode: environment');
+    return;
+  } catch (err) {
+    log('facingMode falló: ' + (err.name || '') + ' — ' + (err.message || err));
+  }
+
+  // 2) Fallback: enumerar y elegir deviceId probable trasero
+  try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoInputs = devices.filter(d => d.kind === 'videoinput');
-    log('Dispositivos totales: ' + devices.length + ', cámaras detectadas: ' + videoInputs.length);
-    videoInputs.forEach((d,i) => log('Cam ' + i + ': label="' + (d.label||'') + '" deviceId="' + d.deviceId + '"'));
-    if (!videoInputs.length) {
-      readerEl.textContent = 'No se detectaron cámaras (videoinput)';
-      return;
-    }
+    log('Cámaras detectadas: ' + videoInputs.length);
+    videoInputs.forEach((d,i) => log(`Cam ${i}: label="${d.label||''}" deviceId="${d.deviceId}"`));
+    if (!videoInputs.length) throw new Error('No se detectaron cámaras (videoinput).');
 
-    // 3) Intento con facingMode environment
-    try {
-      log('Intentando iniciar cámara con facingMode: environment...');
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
-      document.getElementById('reader').textContent = 'Cámara iniciada con facingMode (prueba)';
-      stream.getTracks().forEach(t => t.stop());
-      log('Éxito con facingMode environment');
-      return;
-    } catch (e) {
-      log('facingMode falló: ' + e.name + ' — ' + e.message);
-    }
-
-    // 4) Fallback: intentar con deviceId probable trasero (label o última)
+    // Buscar label que indique trasera
     let chosen = videoInputs.find(d => /back|rear|environment|trasera|posterior/i.test(d.label));
-    if (!chosen) chosen = videoInputs[videoInputs.length - 1];
-    log('Intentando iniciar con deviceId seleccionado: ' + (chosen.label || chosen.deviceId));
-    try {
-      const stream2 = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: chosen.deviceId } } });
-      document.getElementById('reader').textContent = 'Cámara iniciada con deviceId (prueba)';
-      stream2.getTracks().forEach(t => t.stop());
-      log('Éxito con deviceId seleccionado');
-      return;
-    } catch (e) {
-      log('Error con deviceId: ' + e.name + ' — ' + e.message);
-      readerEl.textContent = 'No se pudo iniciar la cámara con deviceId';
-    }
+    if (!chosen) chosen = videoInputs[videoInputs.length - 1]; // fallback común en móviles
+
+    if (!chosen) throw new Error('No se pudo seleccionar deviceId');
+
+    return iniciarConDeviceId(chosen.deviceId, chosen.label);
   } catch (err) {
-    log('Error enumerando dispositivos: ' + (err.name || '') + ' — ' + (err.message || err));
-    readerEl.textContent = 'Error enumerando dispositivos';
+    readerEl.textContent = 'No se pudo iniciar la cámara';
+    log('Error fallback deviceId: ' + (err.name || '') + ' — ' + (err.message || err));
   }
 }
 
-window.addEventListener('load', runDiagnostic);
-</script>
-</body>
-</html>
+/* Iniciar html5-qrcode con deviceId exacto */
+async function iniciarConDeviceId(deviceId, label) {
+  try {
+    if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+    await html5QrCode.start(
+      { deviceId: { exact: deviceId } },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess,
+      onScanFailure
+    );
+    scannerActivo = true;
+    readerEl.textContent = label ? `Escanea (usando: ${label})` : 'Escanea (deviceId seleccionado)';
+    document.getElementById('btnToggle').textContent = '⏸️ Pausar';
+    log('Cámara iniciada con deviceId: ' + deviceId);
+  } catch (err) {
+    readerEl.textContent = 'No se pudo iniciar la cámara con deviceId';
+    log('Error al iniciar con deviceId: ' + (err.name || '') + ' — ' + (err.message || err));
+  }
+}
+
+/* Callbacks de escaneo */
+function onScanSuccess(decodedText) {
+  const now = Date.now();
+  if (decodedText === lastDecoded && (now - lastTime) < DEBOUNCE_MS) return;
+  lastDecoded = decodedText;
+  lastTime = now;
+
+  try { new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play().catch(()=>{}); } catch(e){}
+  if (navigator.vibrate) navigator.vibrate(80);
+
+  document.getElementById('codigo').value = decodedText;
+  document.getElementById('cantidad').focus();
+  document.getElementById('cantidad').select();
+  log('Código detectado: ' + decodedText);
+}
+
+function onScanFailure(error) {
+  // no loguear cada frame para no saturar
+}
+
+/* Detener scanner */
+async function detenerScannerSilencioso() {
+  if (!html5QrCode) return;
+  try { await html5QrCode.stop(); } catch(e){}
+  try { html5QrCode.clear(); } catch(e){}
+  html5QrCode = null;
+  scannerActivo = false;
+}
+
+/* Pausar / reanudar */
+async function toggleScanner() {
+  if (!html5QrCode) {
+    iniciarScannerTrasera();
+    return;
+  }
+  if (scannerActivo) {
+    try {
+      if (html5QrCode.pause) await html5QrCode.pause(true);
+      else await html5QrCode.stop();
+      scannerActivo = false;
+      document.getElementById('btnToggle').textContent = '▶️ Reanudar';
+      readerEl.textContent = 'Escáner en pausa';
+      log('Escáner pausado');
+    } catch (e) {
+      await detenerScannerSilencioso();
+      document.getElementById('btnToggle').textContent = '▶️ Reanudar';
+      log('Error al pausar: ' + (e.name || '') + ' — ' + (e.message || e));
+    }
+  } else {
+    try {
+      if (html5QrCode && html5QrCode.resume) await html5QrCode.resume();
+      else await iniciarScannerTrasera();
+      scannerActivo = true;
+      document.getElementById('btnToggle').textContent = '⏸️ Pausar';
+      readerEl.textContent = 'Escanea un código';
+      log('Escáner reanudado');
+    } catch (e) {
+      log('Error al reanudar: ' + (e.name || '') + ' — ' + (e.message || e));
+      iniciarScannerTrasera();
+    }
+  }
+}
+
+/* Registro y tabla */
+function registrar() {
+  const cod = document.getElementById('codigo').value.trim();
+  const cantVal = document.getElementById('cantidad').value;
+  const cant = parseInt
