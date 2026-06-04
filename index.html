@@ -1,58 +1,81 @@
 <!doctype html>
-<html lang="es" translate="no">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Inventario Dogma - Android</title>
-
-  <!-- Librería para exportar Excel -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <!-- html5-qrcode versión estable minificada -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
-
-  <style>
-    body { font-family: Arial, sans-serif; padding:12px; background:#f4f4f9; color:#222; }
-    .container { max-width:520px; margin:0 auto; background:#fff; padding:16px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
-    #reader { width:100%; background:#000; border-radius:8px; margin-bottom:10px; height:320px; display:flex; align-items:center; justify-content:center; color:#fff; }
-    label { display:block; font-weight:600; margin-top:8px; text-align:left; }
-    input[type="text"], input[type="number"] { width:100%; padding:10px; margin-top:6px; border:1px solid #d0d0d5; border-radius:6px; font-size:16px; box-sizing:border-box; text-align:center; }
-    .row { display:flex; gap:8px; margin-top:10px; }
-    .row button { flex:1; padding:12px; border:none; border-radius:6px; font-weight:700; cursor:pointer; color:#fff; }
-    .btn-reg { background:#28a745; }
-    .btn-excel { background:#f0ad4e; color:#000; }
-    .btn-clear { background:#dc3545; }
-    .btn-toggle { background:#007bff; }
-    table { width:100%; margin-top:12px; border-collapse:collapse; font-size:14px; }
-    th, td { border:1px solid #e6e6ea; padding:8px; text-align:left; }
-    th { background:#fafafa; font-weight:700; }
-    .meta { display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
-    .small { font-size:13px; color:#666; }
-    @media (max-width:520px){ #reader{height:240px;} }
-  </style>
-</head>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Diagnóstico Cámara</title></head>
 <body>
-  <div class="container" role="main" aria-labelledby="titulo">
-    <h1 id="titulo">Inventario Dogma - Android</h1>
+  <h2>Diagnóstico Cámara Android</h2>
+  <div id="reader" style="width:100%;height:220px;background:#000;color:#fff;display:flex;align-items:center;justify-content:center">Iniciando cámara...</div>
+  <pre id="log" style="white-space:pre-wrap;padding:8px;border:1px solid #ddd;margin-top:8px;"></pre>
 
-    <div id="reader" aria-live="polite">Iniciando cámara...</div>
-    <pre id="log" style="white-space:pre-wrap;margin-top:8px;color:#333;background:#f8f8fb;padding:8px;border-radius:6px;border:1px solid #eee;"></pre>
+<script>
+const logEl = document.getElementById('log');
+const readerEl = document.getElementById('reader');
+function log(msg){ const t = new Date().toLocaleTimeString() + ' — ' + msg + '\\n'; logEl.textContent = t + logEl.textContent; console.log(msg); }
 
-    <label for="codigo">Código escaneado</label>
-    <input id="codigo" type="text" placeholder="Esperando escaneo..." readonly aria-readonly="true" aria-label="Código escaneado">
+async function runDiagnostic(){
+  log('Comprobando soporte navigator.mediaDevices...');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    readerEl.textContent = 'API getUserMedia no soportada';
+    log('getUserMedia no soportada en este navegador');
+    return;
+  }
 
-    <label for="cantidad">Cantidad</label>
-    <input id="cantidad" type="number" inputmode="numeric" min="1" placeholder="Cantidad" aria-label="Cantidad" />
+  // 1) Intento simple para forzar permiso y ver error
+  try {
+    log('Solicitando permiso de cámara (getUserMedia simple)...');
+    const s = await navigator.mediaDevices.getUserMedia({ video: true });
+    s.getTracks().forEach(t => t.stop());
+    log('Permiso concedido y stream detenido correctamente');
+  } catch (e) {
+    log('Error en getUserMedia simple: ' + e.name + ' — ' + e.message);
+    readerEl.textContent = 'Error getUserMedia: ' + e.name;
+    // No return: seguimos para listar dispositivos
+  }
 
-    <div class="row">
-      <button class="btn-reg" id="btnRegistrar">📥 Registrar</button>
-      <button class="btn-toggle" id="btnToggle">⏸️ Pausar</button>
-    </div>
+  // 2) Enumerar dispositivos
+  try {
+    log('Enumerando dispositivos...');
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoInputs = devices.filter(d => d.kind === 'videoinput');
+    log('Dispositivos totales: ' + devices.length + ', cámaras detectadas: ' + videoInputs.length);
+    videoInputs.forEach((d,i) => log('Cam ' + i + ': label="' + (d.label||'') + '" deviceId="' + d.deviceId + '"'));
+    if (!videoInputs.length) {
+      readerEl.textContent = 'No se detectaron cámaras (videoinput)';
+      return;
+    }
 
-    <div class="row">
-      <button class="btn-excel" id="btnExport">🍏 Exportar a EXCEL</button>
-      <button class="btn-clear" id="btnClear">🧹 Borrar todo</button>
-    </div>
+    // 3) Intento con facingMode environment
+    try {
+      log('Intentando iniciar cámara con facingMode: environment...');
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+      document.getElementById('reader').textContent = 'Cámara iniciada con facingMode (prueba)';
+      stream.getTracks().forEach(t => t.stop());
+      log('Éxito con facingMode environment');
+      return;
+    } catch (e) {
+      log('facingMode falló: ' + e.name + ' — ' + e.message);
+    }
 
-    <div class="meta">
-      <div><strong>Registros:</strong> <span id="totalReg">0</span></div>
-      <div><strong>Total
+    // 4) Fallback: intentar con deviceId probable trasero (label o última)
+    let chosen = videoInputs.find(d => /back|rear|environment|trasera|posterior/i.test(d.label));
+    if (!chosen) chosen = videoInputs[videoInputs.length - 1];
+    log('Intentando iniciar con deviceId seleccionado: ' + (chosen.label || chosen.deviceId));
+    try {
+      const stream2 = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: chosen.deviceId } } });
+      document.getElementById('reader').textContent = 'Cámara iniciada con deviceId (prueba)';
+      stream2.getTracks().forEach(t => t.stop());
+      log('Éxito con deviceId seleccionado');
+      return;
+    } catch (e) {
+      log('Error con deviceId: ' + e.name + ' — ' + e.message);
+      readerEl.textContent = 'No se pudo iniciar la cámara con deviceId';
+    }
+  } catch (err) {
+    log('Error enumerando dispositivos: ' + (err.name || '') + ' — ' + (err.message || err));
+    readerEl.textContent = 'Error enumerando dispositivos';
+  }
+}
+
+window.addEventListener('load', runDiagnostic);
+</script>
+</body>
+</html>
