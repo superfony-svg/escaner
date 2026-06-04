@@ -1,15 +1,19 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es" translate="no">
 <head>
-  <meta charset="UTF-8">
-  <title>Inventario Dogma Pro</title>
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Inventario Dogma - Android</title>
+
+  <!-- Librería para exportar Excel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- html5-qrcode versión estable minificada -->
   <script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
+
   <style>
-    body { font-family: Arial, sans-serif; padding: 12px; background:#f4f4f9; color:#222; }
-    .container { max-width:480px; margin:0 auto; background:#fff; padding:16px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
-    #reader { width:100%; background:#000; border-radius:8px; margin-bottom:10px; height:260px; display:flex; align-items:center; justify-content:center; color:#fff; }
+    body { font-family: Arial, sans-serif; padding:12px; background:#f4f4f9; color:#222; }
+    .container { max-width:520px; margin:0 auto; background:#fff; padding:16px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+    #reader { width:100%; background:#000; border-radius:8px; margin-bottom:10px; height:320px; display:flex; align-items:center; justify-content:center; color:#fff; }
     label { display:block; font-weight:600; margin-top:8px; text-align:left; }
     input[type="text"], input[type="number"] { width:100%; padding:10px; margin-top:6px; border:1px solid #d0d0d5; border-radius:6px; font-size:16px; box-sizing:border-box; text-align:center; }
     .row { display:flex; gap:8px; margin-top:10px; }
@@ -23,14 +27,15 @@
     th { background:#fafafa; font-weight:700; }
     .meta { display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
     .small { font-size:13px; color:#666; }
-    @media (max-width:480px){ #reader{height:200px;} }
+    @media (max-width:520px){ #reader{height:240px;} }
   </style>
 </head>
 <body>
   <div class="container" role="main" aria-labelledby="titulo">
-    <h1 id="titulo">Inventario Dogma Pro</h1>
+    <h1 id="titulo">Inventario Dogma - Android</h1>
 
-    <div id="reader" aria-live="polite">Cámara inactiva</div>
+    <div id="reader" aria-live="polite">Iniciando cámara...</div>
+    <pre id="log" style="white-space:pre-wrap;margin-top:8px;color:#333;background:#f8f8fb;padding:8px;border-radius:6px;border:1px solid #eee;"></pre>
 
     <label for="codigo">Código escaneado</label>
     <input id="codigo" type="text" placeholder="Esperando escaneo..." readonly aria-readonly="true" aria-label="Código escaneado">
@@ -50,209 +55,4 @@
 
     <div class="meta">
       <div><strong>Registros:</strong> <span id="totalReg">0</span></div>
-      <div><strong>Total Cantidad:</strong> <span id="sumaTotal">0</span></div>
-    </div>
-
-    <table id="tablaInventario" aria-label="Tabla de inventario">
-      <thead><tr><th>Código</th><th>Cantidad</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-
-<script>
-  // Datos y estado
-  let inventario = JSON.parse(localStorage.getItem('datos_inv')) || [];
-  let scannerActivo = true;
-  let html5QrCode = null;
-  let lastDecoded = null;
-  let lastTime = 0;
-  const DEBOUNCE_MS = 1200; // tiempo mínimo entre lecturas iguales
-
-  // Sonidos
-  const soundDetected = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-  const soundRegistered = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-
-  // Inicialización
-  window.addEventListener('load', async () => {
-    actualizarTabla();
-    iniciarScanner();
-    document.getElementById('cantidad').addEventListener('keydown', onCantidadKey);
-    document.getElementById('btnRegistrar').addEventListener('click', registrar);
-    document.getElementById('btnExport').addEventListener('click', exportar);
-    document.getElementById('btnClear').addEventListener('click', borrarTodo);
-    document.getElementById('btnToggle').addEventListener('click', toggleScanner);
-    window.addEventListener('beforeunload', detenerScannerSilencioso);
-  });
-
-  function iniciarScanner() {
-    if (html5QrCode) return;
-    const readerId = "reader";
-    html5QrCode = new Html5Qrcode(readerId);
-    const config = {
-      fps: 10,
-      qrbox: { width: 250, height: 250 },
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.UPC_A
-      ]
-    };
-
-    html5QrCode.start(
-      { facingMode: "environment" },
-      config,
-      onScanSuccess,
-      onScanFailure
-    ).then(() => {
-      document.getElementById('reader').textContent = 'Escanea un código';
-      scannerActivo = true;
-      document.getElementById('btnToggle').textContent = '⏸️ Pausar';
-    }).catch(err => {
-      console.error('No se pudo iniciar la cámara', err);
-      document.getElementById('reader').textContent = 'No se pudo acceder a la cámara';
-      scannerActivo = false;
-      document.getElementById('btnToggle').textContent = '▶️ Reanudar';
-    });
-  }
-
-  function onScanSuccess(decodedText, decodedResult) {
-    const now = Date.now();
-    // Debounce para evitar lecturas repetidas
-    if (decodedText === lastDecoded && (now - lastTime) < DEBOUNCE_MS) return;
-    lastDecoded = decodedText;
-    lastTime = now;
-
-    // Bloqueo visual y sonido
-    soundDetected.play().catch(()=>{});
-    if (navigator.vibrate) navigator.vibrate(80);
-
-    document.getElementById('codigo').value = decodedText;
-    document.getElementById('cantidad').focus();
-    document.getElementById('cantidad').select();
-  }
-
-  function onScanFailure(error) {
-    // No mostrar errores por cada frame; opcionalmente loguear
-    // console.debug('Scan failure', error);
-  }
-
-  async function detenerScannerSilencioso() {
-    if (!html5QrCode) return;
-    try { await html5QrCode.stop(); } catch(e) {}
-    try { html5QrCode.clear(); } catch(e) {}
-    html5QrCode = null;
-  }
-
-  async function toggleScanner() {
-    if (!html5QrCode) {
-      iniciarScanner();
-      return;
-    }
-    if (scannerActivo) {
-      try {
-        await html5QrCode.pause(true);
-        scannerActivo = false;
-        document.getElementById('btnToggle').textContent = '▶️ Reanudar';
-        document.getElementById('reader').textContent = 'Escáner en pausa';
-      } catch(e) {
-        // Si pause no está disponible, detener
-        await detenerScannerSilencioso();
-        scannerActivo = false;
-        document.getElementById('btnToggle').textContent = '▶️ Reanudar';
-      }
-    } else {
-      try {
-        await html5QrCode.resume();
-        scannerActivo = true;
-        document.getElementById('btnToggle').textContent = '⏸️ Pausar';
-        document.getElementById('reader').textContent = 'Escanea un código';
-      } catch(e) {
-        iniciarScanner();
-      }
-    }
-  }
-
-  function onCantidadKey(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      registrar();
-    }
-  }
-
-  function registrar() {
-    let cod = document.getElementById('codigo').value.trim();
-    let cantVal = document.getElementById('cantidad').value;
-    let cant = parseInt(cantVal, 10);
-
-    if (!cod) return alert('Escanea un código primero');
-    if (!cantVal || isNaN(cant) || cant <= 0) return alert('Introduce una cantidad válida (mayor que 0)');
-
-    // Actualizar inventario
-    let existente = inventario.find(i => i.Codigo === cod);
-    if (existente) {
-      existente.Cantidad = Number(existente.Cantidad) + cant;
-    } else {
-      inventario.push({ Codigo: cod, Cantidad: cant });
-    }
-
-    // Guardar
-    localStorage.setItem('datos_inv', JSON.stringify(inventario));
-
-    // Feedback
-    soundRegistered.play().catch(()=>{});
-    if (navigator.vibrate) navigator.vibrate([40,20,40]);
-
-    // Limpiar inputs
-    document.getElementById('codigo').value = '';
-    document.getElementById('cantidad').value = '';
-    document.getElementById('cantidad').focus();
-
-    actualizarTabla();
-  }
-
-  function actualizarTabla() {
-    const tbody = document.querySelector('#tablaInventario tbody');
-    tbody.innerHTML = '';
-    // Mostrar en orden inverso (últimos arriba)
-    [...inventario].slice().reverse().forEach(item => {
-      const tr = document.createElement('tr');
-      const td1 = document.createElement('td');
-      td1.textContent = item.Codigo;
-      const td2 = document.createElement('td');
-      td2.textContent = item.Cantidad;
-      tr.appendChild(td1);
-      tr.appendChild(td2);
-      tbody.appendChild(tr);
-    });
-    document.getElementById('totalReg').innerText = inventario.length;
-    const suma = inventario.reduce((s, it) => s + Number(it.Cantidad), 0);
-    document.getElementById('sumaTotal').innerText = suma;
-  }
-
-  function exportar() {
-    if (!inventario.length) return alert('No hay datos para exportar');
-    // Preparar datos con encabezados y fecha
-    const datos = inventario.map(i => ({ Codigo: i.Codigo, Cantidad: Number(i.Cantidad) }));
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(datos, { header: ['Codigo','Cantidad'] });
-    XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
-    const fecha = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-    const filename = `Inventario_Dogma_${fecha}.xlsx`;
-    XLSX.writeFile(wb, filename);
-  }
-
-  function borrarTodo() {
-    if (!confirm('¿Borrar todo el inventario? Esta acción no se puede deshacer.')) return;
-    inventario = [];
-    localStorage.removeItem('datos_inv');
-    actualizarTabla();
-    // Reiniciar lector
-    document.getElementById('codigo').value = '';
-    document.getElementById('cantidad').value = '';
-  }
-</script>
-</body>
-</html>
+      <div><strong>Total
