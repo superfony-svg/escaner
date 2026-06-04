@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Inventario Dogma - Forzar Cámara Trasera</title>
+  <title>Inventario Dogma - Arranque Trasera Automático</title>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
@@ -26,7 +26,7 @@
 </head>
 <body>
   <div class="wrap" role="main" aria-labelledby="title">
-    <h1 id="title">Inventario Dogma - Cámara Trasera Forzada</h1>
+    <h1 id="title">Inventario Dogma - Cámara Trasera Automática</h1>
 
     <div id="reader" aria-live="polite">Iniciando cámara...</div>
     <pre id="log"></pre>
@@ -59,10 +59,7 @@
   </div>
 
 <script>
-/* --- CONFIGURACIÓN: pega aquí el deviceId detectado en tu móvil --- */
-const FORCED_DEVICE_ID = "e62f6d577b9433cad8b8f0d5885ee5112ceccd79ab145777ea689ad4c766c409";
-
-/* --- Variables --- */
+/* Inventario + arranque automático de cámara trasera sin campo deviceId */
 let inventario = JSON.parse(localStorage.getItem('datos_inv')) || [];
 let html5QrCode = null;
 let scannerActivo = false;
@@ -72,14 +69,13 @@ const DEBOUNCE_MS = 1200;
 const logEl = document.getElementById('log');
 const readerEl = document.getElementById('reader');
 
-/* --- Logging --- */
 function log(msg){
   const t = new Date().toLocaleTimeString();
   logEl.textContent = `${t} — ${msg}\n` + logEl.textContent;
   console.log(msg);
 }
 
-/* --- UI init --- */
+/* UI init */
 window.addEventListener('load', () => {
   actualizarTabla();
   document.getElementById('btnRegistrar').addEventListener('click', registrar);
@@ -94,9 +90,9 @@ window.addEventListener('load', () => {
     return;
   }
 
-  // Pedimos permiso y arrancamos forzando deviceId
+  // Pedimos permiso para que enumerateDevices muestre labels
   navigator.mediaDevices.getUserMedia({ video: true })
-    .then(s => { s.getTracks().forEach(t => t.stop()); iniciarConDeviceId(FORCED_DEVICE_ID); })
+    .then(s => { s.getTracks().forEach(t => t.stop()); arrancarTraseraSecuencial(); })
     .catch(e => {
       readerEl.textContent = 'Permiso denegado o cámara no disponible';
       log('getUserMedia inicial falló: ' + e.name + ' — ' + e.message);
@@ -105,7 +101,7 @@ window.addEventListener('load', () => {
   window.addEventListener('beforeunload', detenerScannerSilencioso);
 });
 
-/* --- Detener instancia previa --- */
+/* Detener instancia previa */
 async function detenerScannerSilencioso() {
   if (!html5QrCode) return;
   try { await html5QrCode.stop(); } catch(e){}
@@ -114,42 +110,111 @@ async function detenerScannerSilencioso() {
   scannerActivo = false;
 }
 
-/* --- Iniciar con deviceId exacto --- */
-async function iniciarConDeviceId(deviceId) {
+/* Intento definitivo: facingMode -> probar cada deviceId (priorizar labels "back") */
+async function arrancarTraseraSecuencial() {
+  await detenerScannerSilencioso();
+  // 1) Intento rápido con facingMode
   try {
-    await detenerScannerSilencioso();
     html5QrCode = new Html5Qrcode("reader");
     await html5QrCode.start(
-      { deviceId: { exact: deviceId } },
+      { facingMode: "environment" },
       { fps: 10, qrbox: { width: 250, height: 250 } },
       onScanSuccess,
       onScanFailure
     );
     scannerActivo = true;
-    readerEl.textContent = 'Escanea (cámara trasera forzada)';
+    readerEl.textContent = 'Escanea (trasera por facingMode)';
     document.getElementById('btnToggle').textContent = '⏸️ Pausar';
-    log('Cámara iniciada con deviceId: ' + deviceId);
+    log('Cámara iniciada con facingMode: environment');
+    return;
   } catch (err) {
-    readerEl.textContent = 'No se pudo iniciar la cámara con deviceId';
-    log('Error al iniciar con deviceId: ' + (err.name || '') + ' — ' + (err.message || err));
-    // Si falla, listar cámaras para diagnóstico final
-    try { await listarCamarasParaDiagnostico(); } catch(e){ log('Error listando cámaras: ' + e); }
+    log('facingMode falló: ' + (err.name||'') + ' — ' + (err.message||err));
+    await detenerScannerSilencioso();
   }
-}
 
-/* --- Listar cámaras para diagnóstico (si falla) --- */
-async function listarCamarasParaDiagnostico() {
+  // 2) Enumerar cámaras y crear lista priorizada
+  let videoInputs = [];
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoInputs = devices.filter(d => d.kind === 'videoinput');
-    log('Diagnóstico: cámaras detectadas: ' + videoInputs.length);
-    videoInputs.forEach((d,i) => log(`Cam ${i}: label="${d.label||''}" deviceId="${d.deviceId}"`));
+    videoInputs = devices.filter(d => d.kind === 'videoinput');
+    log('Cámaras detectadas: ' + videoInputs.length);
+    videoInputs.forEach((d,i) => log(`Cam ${i}: label="${d.label||''}" id="${d.deviceId}"`));
+    if (!videoInputs.length) throw new Error('No se detectaron cámaras');
   } catch (e) {
-    log('Error enumerateDevices: ' + (e.name||'') + ' — ' + (e.message||e));
+    readerEl.textContent = 'No se detectaron cámaras';
+    log('enumerateDevices falló: ' + (e.name||'') + ' — ' + (e.message||e));
+    return;
   }
+
+  // Priorizar cámaras con label que indique trasera
+  const prioritized = [
+    ...videoInputs.filter(d => /back|rear|environment|trasera|posterior|facing back/i.test(d.label)),
+    ...videoInputs.filter(d => !/back|rear|environment|trasera|posterior|facing back/i.test(d.label))
+  ];
+
+  // 3) Probar cada deviceId secuencialmente con timeout por intento
+  for (const cam of prioritized) {
+    log('Intentando deviceId: ' + (cam.label || cam.deviceId));
+    const ok = await intentarIniciarDeviceIdConTimeout(cam.deviceId, 3500);
+    if (ok) {
+      log('Éxito con deviceId: ' + (cam.label || cam.deviceId));
+      return;
+    } else {
+      log('Fallo con deviceId: ' + (cam.label || cam.deviceId));
+      await detenerScannerSilencioso();
+    }
+  }
+
+  // 4) Si todo falla, mostrar diagnóstico final
+  readerEl.textContent = 'No se pudo iniciar la cámara trasera automáticamente';
+  log('Todos los intentos fallaron. Revisa permisos o prueba otro navegador/móvil.');
 }
 
-/* --- Callbacks de escaneo --- */
+/* Intentar iniciar con deviceId y timeout */
+function intentarIniciarDeviceIdConTimeout(deviceId, timeoutMs) {
+  return new Promise(async resolve => {
+    let finished = false;
+    const timer = setTimeout(async () => {
+      if (finished) return;
+      finished = true;
+      log('Timeout al iniciar deviceId: ' + deviceId);
+      try { if (html5QrCode) await html5QrCode.stop(); } catch(e){}
+      resolve(false);
+    }, timeoutMs);
+
+    try {
+      html5QrCode = new Html5Qrcode("reader");
+      await html5QrCode.start(
+        { deviceId: { exact: deviceId } },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess,
+        onScanFailure
+      );
+      if (finished) {
+        // si ya expiró el timeout, detener y devolver false
+        try { await html5QrCode.stop(); } catch(e){}
+        clearTimeout(timer);
+        resolve(false);
+        return;
+      }
+      finished = true;
+      clearTimeout(timer);
+      scannerActivo = true;
+      readerEl.textContent = 'Escanea (trasera seleccionada)';
+      document.getElementById('btnToggle').textContent = '⏸️ Pausar';
+      resolve(true);
+    } catch (err) {
+      if (!finished) {
+        finished = true;
+        clearTimeout(timer);
+        log('Error start deviceId: ' + (err.name||'') + ' — ' + (err.message||err));
+        resolve(false);
+      }
+    }
+  });
+}
+
+/* Callbacks de escaneo */
 function onScanSuccess(decodedText) {
   const now = Date.now();
   if (decodedText === lastDecoded && (now - lastTime) < DEBOUNCE_MS) return;
@@ -166,9 +231,9 @@ function onScanSuccess(decodedText) {
 }
 function onScanFailure(error) { /* no loguear cada frame */ }
 
-/* --- Pausar / reanudar --- */
+/* Pausar / reanudar */
 async function toggleScanner() {
-  if (!html5QrCode) { iniciarConDeviceId(FORCED_DEVICE_ID); return; }
+  if (!html5QrCode) { arrancarTraseraSecuencial(); return; }
   if (scannerActivo) {
     try {
       if (html5QrCode.pause) await html5QrCode.pause(true);
@@ -185,19 +250,19 @@ async function toggleScanner() {
   } else {
     try {
       if (html5QrCode && html5QrCode.resume) await html5QrCode.resume();
-      else await iniciarConDeviceId(FORCED_DEVICE_ID);
+      else await arrancarTraseraSecuencial();
       scannerActivo = true;
       document.getElementById('btnToggle').textContent = '⏸️ Pausar';
       readerEl.textContent = 'Escanea un código';
       log('Escáner reanudado');
     } catch (e) {
       log('Error al reanudar: ' + (e.name || '') + ' — ' + (e.message || e));
-      iniciarConDeviceId(FORCED_DEVICE_ID);
+      arrancarTraseraSecuencial();
     }
   }
 }
 
-/* --- Registro y tabla --- */
+/* Registro y tabla */
 function registrar() {
   const cod = document.getElementById('codigo').value.trim();
   const cantVal = document.getElementById('cantidad').value;
