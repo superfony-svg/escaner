@@ -1,394 +1,235 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Inventario Dogma - Scanner Android (definitivo)</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Inventario Dogma — Escáner Profesional</title>
 
-  <!-- SheetJS para exportar Excel -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <!-- jsQR como fallback para QR -->
-  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
-  <style>
-    body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f9;color:#222;padding:12px}
-    .wrap{max-width:520px;margin:0 auto;background:#fff;padding:14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
-    #videoWrap{width:100%;height:320px;background:#000;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
-    video{width:100%;height:100%;object-fit:cover}
-    #overlay{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none}
-    pre#log{white-space:pre-wrap;background:#fafafa;border:1px solid #eee;padding:8px;border-radius:6px;max-height:140px;overflow:auto;margin-top:8px}
-    label{display:block;margin-top:8px;font-weight:600}
-    input[type="text"], input[type="number"]{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;margin-top:6px;box-sizing:border-box}
-    .row{display:flex;gap:8px;margin-top:10px}
-    button{flex:1;padding:12px;border-radius:6px;border:0;font-weight:700;color:#fff;cursor:pointer}
-    .btn-green{background:#28a745}.btn-yellow{background:#f0ad4e;color:#000}.btn-red{background:#dc3545}.btn-blue{background:#007bff}
-    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
-    th,td{border:1px solid #eaeaea;padding:8px;text-align:left}
-    th{background:#fafafa}
-    @media(max-width:520px){#videoWrap{height:240px}}
-  </style>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f9;padding:12px;display:flex;justify-content:center}
+  .card{width:100%;max-width:520px;background:#fff;padding:14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+  #videoWrap{background:#000;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;height:320px}
+  video{width:100%;height:100%;object-fit:cover}
+  #indicator{margin-top:10px;font-weight:700;color:#2b7a2b;height:22px}
+  label{display:block;margin-top:10px;font-weight:600}
+  input,button{width:100%;padding:12px;margin-top:6px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box}
+  .row{display:flex;gap:8px;margin-top:10px}
+  .row button{flex:1;border:0;color:#fff;font-weight:700;cursor:pointer}
+  .green{background:#28a745}.blue{background:#007bff}.yellow{background:#f0ad4e;color:#000}.red{background:#dc3545}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
+  th,td{border:1px solid #eaeaea;padding:8px;text-align:left}
+  th{background:#fafafa}
+  @media(max-width:520px){#videoWrap{height:220px}}
+</style>
 </head>
 <body>
-  <div class="wrap" role="main" aria-labelledby="title">
-    <h1 id="title">Inventario Dogma - Scanner Android</h1>
+<div class="card">
+  <h2>Inventario Dogma — Escáner</h2>
 
-    <div id="videoWrap">
-      <video id="video" autoplay playsinline muted></video>
-      <canvas id="overlay"></canvas>
-    </div>
-
-    <pre id="log">Iniciando...</pre>
-
-    <label for="codigo">Código detectado</label>
-    <input id="codigo" type="text" readonly placeholder="Esperando escaneo...">
-
-    <label for="cantidad">Cantidad</label>
-    <input id="cantidad" type="number" min="1" placeholder="Cantidad">
-
-    <div class="row">
-      <button id="btnRegistrar" class="btn-green">📥 Registrar</button>
-      <button id="btnToggle" class="btn-blue">⏸️ Pausar</button>
-    </div>
-
-    <div class="row">
-      <button id="btnExport" class="btn-yellow">🍏 Exportar a EXCEL</button>
-      <button id="btnClear" class="btn-red">🧹 Borrar todo</button>
-    </div>
-
-    <div style="display:flex;justify-content:space-between;margin-top:10px">
-      <div><strong>Registros:</strong> <span id="totalReg">0</span></div>
-      <div><strong>Total Cantidad:</strong> <span id="sumaTotal">0</span></div>
-    </div>
-
-    <table id="tablaInventario" aria-label="Tabla de inventario">
-      <thead><tr><th>Código</th><th>Cantidad</th></tr></thead>
-      <tbody></tbody>
-    </table>
+  <div id="videoWrap">
+    <video id="video" autoplay playsinline muted></video>
   </div>
 
+  <div id="indicator">Escaneando…</div>
+
+  <!-- Campo oculto para almacenar internamente el código -->
+  <input id="codigoHidden" type="hidden">
+
+  <label for="cantidad">Cantidad</label>
+  <input id="cantidad" type="number" min="1" placeholder="Cantidad">
+
+  <div class="row">
+    <button id="btnRegistrar" class="green">📥 Registrar</button>
+    <button id="btnToggle" class="blue">⏸️ Pausar</button>
+  </div>
+
+  <div class="row">
+    <button id="btnExport" class="yellow">🍏 Exportar CSV</button>
+    <button id="btnClear" class="red">🧹 Borrar todo</button>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;margin-top:10px">
+    <div><strong>Registros:</strong> <span id="totalReg">0</span></div>
+    <div><strong>Total Cantidad:</strong> <span id="sumaTotal">0</span></div>
+  </div>
+
+  <table id="tablaInventario">
+    <thead><tr><th>Código</th><th>Cantidad</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
 <script>
-/* ---------- Variables ---------- */
-const video = document.getElementById('video');
-const overlay = document.getElementById('overlay');
-const logEl = document.getElementById('log');
-const codigoEl = document.getElementById('codigo');
-const cantidadEl = document.getElementById('cantidad');
-let canvas, ctx;
+let video = document.getElementById('video');
+let indicator = document.getElementById('indicator');
+let codigoHidden = document.getElementById('codigoHidden');
+let cantidadEl = document.getElementById('cantidad');
+
+let inventario = JSON.parse(localStorage.getItem('datos_inv')) || [];
 let stream = null;
 let scanning = false;
 let lastDecoded = null;
 let lastTime = 0;
-const DEBOUNCE_MS = 1000;
-let barcodeDetector = null;
-let inventario = JSON.parse(localStorage.getItem('datos_inv')) || [];
+const DEBOUNCE = 1000;
 
-/* ---------- Util logging ---------- */
-function log(msg){
-  const t = new Date().toLocaleTimeString();
-  logEl.textContent = `${t} — ${msg}\n` + logEl.textContent;
-  console.log(msg);
-}
+function vibrar(){ if(navigator.vibrate) navigator.vibrate(60); }
+function beep(){ try{ new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play(); }catch(e){} }
 
-/* ---------- Inicialización UI ---------- */
-window.addEventListener('load', async () => {
-  actualizarTabla();
-  document.getElementById('btnRegistrar').addEventListener('click', registrar);
-  document.getElementById('btnExport').addEventListener('click', exportar);
-  document.getElementById('btnClear').addEventListener('click', borrarTodo);
-  document.getElementById('btnToggle').addEventListener('click', toggleScanning);
-  cantidadEl.addEventListener('keydown', e => { if (e.key === 'Enter') registrar(); });
-
-  canvas = document.createElement('canvas');
-  ctx = canvas.getContext('2d');
-  overlay.width = overlay.clientWidth;
-  overlay.height = overlay.clientHeight;
-
-  // Inicializar BarcodeDetector si existe
-  if ('BarcodeDetector' in window) {
-    try {
-      const supported = await BarcodeDetector.getSupportedFormats();
-      barcodeDetector = new BarcodeDetector({ formats: supported });
-      log('BarcodeDetector disponible. Formatos: ' + supported.join(', '));
-    } catch (e) {
-      log('BarcodeDetector no disponible: ' + e.message);
-      barcodeDetector = null;
-    }
-  } else {
-    log('BarcodeDetector no soportado, se usará fallback jsQR (solo QR).');
-  }
-
-  // Intento definitivo de arrancar la trasera
-  await startRearCameraAuto();
-});
-
-/* ---------- Selección y arranque de cámara trasera ---------- */
-async function startRearCameraAuto() {
-  log('Buscando cámaras y arrancando trasera...');
-  // Pedir permiso y detener stream para que labels aparezcan
-  try {
-    const temp = await navigator.mediaDevices.getUserMedia({ video: true });
-    temp.getTracks().forEach(t => t.stop());
-  } catch (e) {
-    log('Permiso de cámara denegado o no disponible: ' + (e.name || e.message));
-    document.getElementById('videoWrap').style.display = 'none';
-    return;
-  }
-
-  // Enumerar dispositivos
-  let devices = [];
-  try {
-    const all = await navigator.mediaDevices.enumerateDevices();
-    devices = all.filter(d => d.kind === 'videoinput');
-    log('Cámaras detectadas: ' + devices.length);
-    devices.forEach((d,i) => log(`Cam ${i}: label="${d.label}" id="${d.deviceId}"`));
-  } catch (e) {
-    log('enumerateDevices falló: ' + (e.name || e.message));
-  }
-
-  // Priorizar labels que indiquen trasera
-  let prioritized = [];
-  if (devices.length) {
-    const rear = devices.filter(d => /back|rear|environment|trasera|posterior|facing back/i.test(d.label));
-    const others = devices.filter(d => !/back|rear|environment|trasera|posterior|facing back/i.test(d.label));
-    prioritized = [...rear, ...others];
-  }
-
-  // Si no hay devices, intentar facingMode environment
-  if (!prioritized.length) {
-    log('No se detectaron labels; intentando facingMode: environment');
-    try {
-      await startStream({ facingMode: { ideal: 'environment' } });
-      log('Cámara iniciada con facingMode environment');
-      startProcessing();
-      return;
-    } catch (e) {
-      log('facingMode falló: ' + (e.name || e.message));
-    }
-  }
-
-  // Probar cada deviceId secuencialmente hasta que uno funcione
-  for (const cam of prioritized) {
-    log('Intentando deviceId: ' + (cam.label || cam.deviceId));
-    try {
-      await startStream({ deviceId: { exact: cam.deviceId } });
-      log('Stream iniciado con deviceId: ' + (cam.label || cam.deviceId));
-      startProcessing();
-      return;
-    } catch (e) {
-      log('No arrancó con ese deviceId: ' + (e.name || e.message));
-      await stopStream();
-    }
-  }
-
-  // Si todo falla, intentar facingMode una vez más
-  try {
-    await startStream({ facingMode: { ideal: 'environment' } });
-    log('Cámara iniciada con facingMode environment (último intento)');
-    startProcessing();
-    return;
-  } catch (e) {
-    log('Último intento con facingMode falló: ' + (e.name || e.message));
-  }
-
-  // Si llegamos aquí, no se pudo iniciar
-  log('No se pudo iniciar la cámara trasera automáticamente. Revisa permisos o prueba otro navegador/móvil.');
-  document.getElementById('videoWrap').style.display = 'none';
-}
-
-/* ---------- start/stop stream ---------- */
-async function startStream(constraints) {
-  await stopStream();
-  const c = { video: constraints, audio: false };
-  stream = await navigator.mediaDevices.getUserMedia(c);
-  video.srcObject = stream;
-  await video.play();
-  // ajustar overlay canvas tamaño real
-  overlay.width = video.videoWidth || overlay.clientWidth;
-  overlay.height = video.videoHeight || overlay.clientHeight;
-}
-
-async function stopStream() {
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop());
-    stream = null;
-  }
-  try { video.pause(); } catch(e){}
-}
-
-/* ---------- Procesamiento de frames (BarcodeDetector o jsQR) ---------- */
-function startProcessing() {
-  if (scanning) return;
-  scanning = true;
-  log('Iniciando procesamiento de frames...');
-  requestAnimationFrame(processFrame);
-}
-
-async function processFrame() {
-  if (!scanning || !stream) return;
-  try {
-    // dibujar frame en canvas
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    if (!w || !h) { requestAnimationFrame(processFrame); return; }
-    canvas.width = w;
-    canvas.height = h;
-    ctx.drawImage(video, 0, 0, w, h);
-
-    // limpiar overlay
-    const octx = overlay.getContext('2d');
-    overlay.width = overlay.clientWidth;
-    overlay.height = overlay.clientHeight;
-    octx.clearRect(0,0,overlay.width,overlay.height);
-
-    // 1) BarcodeDetector si está disponible (detecta QR y 1D)
-    if (barcodeDetector) {
-      try {
-        const barcodes = await barcodeDetector.detect(video);
-        if (barcodes && barcodes.length) {
-          // dibujar caja y tomar el primer valor
-          const b = barcodes[0];
-          drawBoundingBox(octx, b.boundingBox);
-          handleDecoded(b.rawValue);
-          requestAnimationFrame(processFrame);
-          return;
-        }
-      } catch (e) {
-        // si detect falla, lo ignoramos y usamos fallback
-        console.warn('BarcodeDetector error', e);
-      }
-    }
-
-    // 2) Fallback jsQR (solo QR)
-    const imageData = ctx.getImageData(0,0,w,h);
-    const qr = jsQR(imageData.data, w, h);
-    if (qr && qr.data) {
-      // dibujar caja aproximada
-      drawLine(octx, qr.location.topLeftCorner, qr.location.topRightCorner);
-      drawLine(octx, qr.location.topRightCorner, qr.location.bottomRightCorner);
-      drawLine(octx, qr.location.bottomRightCorner, qr.location.bottomLeftCorner);
-      drawLine(octx, qr.location.bottomLeftCorner, qr.location.topLeftCorner);
-      handleDecoded(qr.data);
-      requestAnimationFrame(processFrame);
-      return;
-    }
-  } catch (err) {
-    console.error(err);
-  }
-  requestAnimationFrame(processFrame);
-}
-
-/* ---------- Dibujo en overlay ---------- */
-function drawBoundingBox(octx, box) {
-  if (!box) return;
-  octx.strokeStyle = 'lime';
-  octx.lineWidth = 4;
-  octx.beginPath();
-  octx.rect(box.x, box.y, box.width, box.height);
-  octx.stroke();
-}
-function drawLine(octx, p1, p2) {
-  octx.strokeStyle = 'lime';
-  octx.lineWidth = 4;
-  octx.beginPath();
-  octx.moveTo(p1.x, p1.y);
-  octx.lineTo(p2.x, p2.y);
-  octx.stroke();
-}
-
-/* ---------- Manejo de código detectado ---------- */
-function handleDecoded(text) {
-  const now = Date.now();
-  if (!text) return;
-  if (text === lastDecoded && (now - lastTime) < DEBOUNCE_MS) return;
-  lastDecoded = text;
-  lastTime = now;
-  try { new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play().catch(()=>{}); } catch(e){}
-  if (navigator.vibrate) navigator.vibrate(60);
-  codigoEl.value = text;
-  cantidadEl.focus();
-  cantidadEl.select();
-  log('Código detectado: ' + text);
-}
-
-/* ---------- Pausar / reanudar ---------- */
-function toggleScanning() {
-  if (!scanning) {
-    scanning = true;
-    startProcessing();
-    document.getElementById('btnToggle').textContent = '⏸️ Pausar';
-    log('Procesamiento reanudado');
-  } else {
-    scanning = false;
-    document.getElementById('btnToggle').textContent = '▶️ Reanudar';
-    log('Procesamiento pausado');
-  }
-}
-
-/* ---------- Registro y UI ---------- */
-function registrar() {
-  const cod = codigoEl.value.trim();
-  const cantVal = cantidadEl.value;
-  const cant = parseInt(cantVal, 10);
-  if (!cod) return alert('Escanea un código primero');
-  if (!cantVal || isNaN(cant) || cant <= 0) return alert('Introduce una cantidad válida (mayor que 0)');
-
-  const existente = inventario.find(i => i.Codigo === cod);
-  if (existente) existente.Cantidad = Number(existente.Cantidad) + cant;
-  else inventario.push({ Codigo: cod, Cantidad: cant });
-
-  localStorage.setItem('datos_inv', JSON.stringify(inventario));
-  try { new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play().catch(()=>{}); } catch(e){}
-  if (navigator.vibrate) navigator.vibrate([40,20,40]);
-
-  codigoEl.value = '';
-  cantidadEl.value = '';
-  cantidadEl.focus();
-  actualizarTabla();
-  log('Registrado: ' + cod + ' x' + cant);
-}
-
-function actualizarTabla() {
+function actualizarTabla(){
   const tbody = document.querySelector('#tablaInventario tbody');
   tbody.innerHTML = '';
-  [...inventario].slice().reverse().forEach(item => {
-    const tr = document.createElement('tr');
-    const td1 = document.createElement('td'); td1.textContent = item.Codigo;
-    const td2 = document.createElement('td'); td2.textContent = item.Cantidad;
-    tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+  [...inventario].slice().reverse().forEach(i=>{
+    tbody.innerHTML += `<tr><td>${i.Codigo}</td><td>${i.Cantidad}</td></tr>`;
   });
-  document.getElementById('totalReg').innerText = inventario.length;
-  const suma = inventario.reduce((s, it) => s + Number(it.Cantidad), 0);
-  document.getElementById('sumaTotal').innerText = suma;
+  document.getElementById('totalReg').textContent = inventario.length;
+  document.getElementById('sumaTotal').textContent = inventario.reduce((a,b)=>a+Number(b.Cantidad),0);
 }
 
-/* ---------- Exportar / Borrar ---------- */
-function exportar() {
-  if (!inventario.length) return alert('No hay datos para exportar');
-  const datos = inventario.map(i => ({ Codigo: i.Codigo, Cantidad: Number(i.Cantidad) }));
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(datos, { header: ['Codigo','Cantidad'] });
-  XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
-  const fecha = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-  const filename = `Inventario_Dogma_${fecha}.xlsx`;
-  XLSX.writeFile(wb, filename);
-  log('Exportado a ' + filename);
+async function stopStream(){
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+    stream=null;
+  }
+  scanning=false;
+  indicator.textContent="Escáner detenido";
 }
 
-function borrarTodo() {
-  if (!confirm('¿Borrar todo el inventario? Esta acción no se puede deshacer.')) return;
-  inventario = [];
+async function startStream(constraints){
+  await stopStream();
+  stream = await navigator.mediaDevices.getUserMedia({video:constraints,audio:false});
+  video.srcObject = stream;
+  await video.play();
+  scanning=true;
+  indicator.textContent="Escaneando…";
+  processLoop();
+}
+
+async function startRearCamera(){
+  try{
+    const tmp = await navigator.mediaDevices.getUserMedia({video:true});
+    tmp.getTracks().forEach(t=>t.stop());
+  }catch(e){
+    indicator.textContent="Permiso denegado";
+    return;
+  }
+
+  const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+
+  const rear = devices.filter(d=>/back|rear|environment|trasera|posterior/i.test(d.label));
+  const ordered = [...rear, ...devices];
+
+  for(const cam of ordered){
+    try{
+      await startStream({deviceId:{exact:cam.deviceId}});
+      return;
+    }catch(e){}
+  }
+
+  try{
+    await startStream({facingMode:{ideal:"environment"}});
+  }catch(e){
+    indicator.textContent="No se pudo iniciar la cámara";
+  }
+}
+
+async function processLoop(){
+  if(!scanning || !stream) return;
+
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if(!w || !h){ requestAnimationFrame(processLoop); return; }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video,0,0,w,h);
+
+  if("BarcodeDetector" in window){
+    try{
+      const detector = new BarcodeDetector();
+      const codes = await detector.detect(video);
+      if(codes.length){
+        handleDecoded(codes[0].rawValue);
+      }
+    }catch(e){}
+  }else{
+    const img = ctx.getImageData(0,0,w,h);
+    const qr = jsQR(img.data,w,h);
+    if(qr) handleDecoded(qr.data);
+  }
+
+  requestAnimationFrame(processLoop);
+}
+
+function handleDecoded(text){
+  const now = Date.now();
+  if(text===lastDecoded && now-lastTime<DEBOUNCE) return;
+  lastDecoded=text;
+  lastTime=now;
+
+  codigoHidden.value="***"; // oculto
+  indicator.textContent="Código detectado";
+  beep(); vibrar();
+}
+
+document.getElementById('btnRegistrar').addEventListener('click',()=>{
+  const cod = lastDecoded;
+  const cant = parseInt(cantidadEl.value,10);
+
+  if(!cod) return alert("Escanea un código primero");
+  if(!cant || cant<=0) return alert("Cantidad inválida");
+
+  const ex = inventario.find(i=>i.Codigo===cod);
+  if(ex) ex.Cantidad += cant;
+  else inventario.push({Codigo:cod,Cantidad:cant});
+
+  localStorage.setItem('datos_inv',JSON.stringify(inventario));
+
+  lastDecoded=null;
+  codigoHidden.value="";
+  cantidadEl.value="";
+  cantidadEl.focus();
+  indicator.textContent="Escaneando…";
+
+  actualizarTabla();
+  beep(); vibrar();
+});
+
+document.getElementById('btnToggle').addEventListener('click',()=>{
+  if(scanning){
+    stopStream();
+    document.getElementById('btnToggle').textContent="▶️ Reanudar";
+  }else{
+    document.getElementById('btnToggle').textContent="⏸️ Pausar";
+    startRearCamera();
+  }
+});
+
+document.getElementById('btnClear').addEventListener('click',()=>{
+  if(!confirm("¿Borrar todo?")) return;
+  inventario=[];
   localStorage.removeItem('datos_inv');
   actualizarTabla();
-  codigoEl.value = '';
-  cantidadEl.value = '';
-  log('Inventario borrado');
-}
-
-/* ---------- Limpiar al salir ---------- */
-window.addEventListener('beforeunload', async () => {
-  scanning = false;
-  await stopStream();
 });
+
+document.getElementById('btnExport').addEventListener('click',()=>{
+  if(!inventario.length) return alert("No hay datos");
+  const header=["Codigo","Cantidad"];
+  const rows=inventario.map(i=>[i.Codigo,i.Cantidad]);
+  const csv=[header,...rows].map(r=>r.join(",")).join("\n");
+  const blob=new Blob([csv],{type:"text/csv"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="Inventario_Dogma.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+startRearCamera();
 </script>
 </body>
 </html>
