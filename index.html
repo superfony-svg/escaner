@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es" translate="no">
+<html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Inventario Dogma - Cámara Trasera (Android)</title>
+  <title>Inventario Dogma - Solución Cámara Trasera</title>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
@@ -26,7 +26,7 @@
 </head>
 <body>
   <div class="wrap" role="main" aria-labelledby="title">
-    <h1 id="title">Inventario Dogma - Android</h1>
+    <h1 id="title">Inventario Dogma - Cámara Trasera (Android)</h1>
 
     <div id="reader" aria-live="polite">Iniciando cámara...</div>
     <pre id="log"></pre>
@@ -62,7 +62,7 @@
   </div>
 
 <script>
-/* Variables */
+/* --- Variables --- */
 let inventario = JSON.parse(localStorage.getItem('datos_inv')) || [];
 let html5QrCode = null;
 let scannerActivo = false;
@@ -72,14 +72,14 @@ const DEBOUNCE_MS = 1200;
 const logEl = document.getElementById('log');
 const readerEl = document.getElementById('reader');
 
-/* Util: log en pantalla */
+/* --- Logging en pantalla --- */
 function log(msg){
   const t = new Date().toLocaleTimeString();
   logEl.textContent = `${t} — ${msg}\n` + logEl.textContent;
   console.log(msg);
 }
 
-/* Inicialización UI */
+/* --- Inicialización UI --- */
 window.addEventListener('load', () => {
   actualizarTabla();
   document.getElementById('btnRegistrar').addEventListener('click', registrar);
@@ -88,13 +88,13 @@ window.addEventListener('load', () => {
   document.getElementById('btnToggle').addEventListener('click', toggleScanner);
   document.getElementById('cantidad').addEventListener('keydown', e => { if (e.key === 'Enter') registrar(); });
 
-  // Pedir permiso primero para que enumerateDevices muestre labels
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     readerEl.textContent = 'getUserMedia no soportado';
     log('API getUserMedia no soportada en este navegador');
     return;
   }
 
+  // Pedimos permiso primero (deteneremos el stream inmediatamente)
   navigator.mediaDevices.getUserMedia({ video: true })
     .then(s => { s.getTracks().forEach(t => t.stop()); iniciarScannerTrasera(); })
     .catch(e => {
@@ -105,17 +105,29 @@ window.addEventListener('load', () => {
   window.addEventListener('beforeunload', detenerScannerSilencioso);
 });
 
-/* Iniciar scanner: facingMode -> fallback deviceId -> manual override */
+/* --- Detener instancia previa con seguridad --- */
+async function detenerScannerSilencioso() {
+  if (!html5QrCode) return;
+  try { await html5QrCode.stop(); } catch(e){}
+  try { html5QrCode.clear(); } catch(e){}
+  html5QrCode = null;
+  scannerActivo = false;
+}
+
+/* --- Iniciar scanner: preferencia deviceId trasera --- */
 async function iniciarScannerTrasera() {
+  // Si hay instancia previa, detenerla
+  await detenerScannerSilencioso();
+
   const forced = document.getElementById('forceDevice').value.trim();
   if (forced) {
-    log('Se usará deviceId forzado por el usuario');
+    log('Usando deviceId forzado por usuario');
     return iniciarConDeviceId(forced);
   }
 
-  // 1) Intento con facingMode: environment (ideal)
+  // 1) Intento con facingMode (rápido)
   try {
-    if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+    html5QrCode = new Html5Qrcode("reader");
     await html5QrCode.start(
       { facingMode: "environment" },
       { fps: 10, qrbox: { width: 250, height: 250 } },
@@ -129,9 +141,11 @@ async function iniciarScannerTrasera() {
     return;
   } catch (err) {
     log('facingMode falló: ' + (err.name || '') + ' — ' + (err.message || err));
+    // continuar a fallback
+    try { await detenerScannerSilencioso(); } catch(e){}
   }
 
-  // 2) Fallback: enumerar y elegir deviceId probable trasero
+  // 2) Fallback: enumerar dispositivos y elegir la trasera por label o la última
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoInputs = devices.filter(d => d.kind === 'videoinput');
@@ -140,7 +154,7 @@ async function iniciarScannerTrasera() {
     if (!videoInputs.length) throw new Error('No se detectaron cámaras (videoinput).');
 
     // Buscar label que indique trasera
-    let chosen = videoInputs.find(d => /back|rear|environment|trasera|posterior/i.test(d.label));
+    let chosen = videoInputs.find(d => /back|rear|environment|trasera|posterior|facing back/i.test(d.label));
     if (!chosen) chosen = videoInputs[videoInputs.length - 1]; // fallback común en móviles
 
     if (!chosen) throw new Error('No se pudo seleccionar deviceId');
@@ -152,10 +166,11 @@ async function iniciarScannerTrasera() {
   }
 }
 
-/* Iniciar html5-qrcode con deviceId exacto */
+/* --- Iniciar con deviceId exacto --- */
 async function iniciarConDeviceId(deviceId, label) {
   try {
-    if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+    await detenerScannerSilencioso();
+    html5QrCode = new Html5Qrcode("reader");
     await html5QrCode.start(
       { deviceId: { exact: deviceId } },
       { fps: 10, qrbox: { width: 250, height: 250 } },
@@ -172,7 +187,7 @@ async function iniciarConDeviceId(deviceId, label) {
   }
 }
 
-/* Callbacks de escaneo */
+/* --- Callbacks de escaneo --- */
 function onScanSuccess(decodedText) {
   const now = Date.now();
   if (decodedText === lastDecoded && (now - lastTime) < DEBOUNCE_MS) return;
@@ -187,26 +202,11 @@ function onScanSuccess(decodedText) {
   document.getElementById('cantidad').select();
   log('Código detectado: ' + decodedText);
 }
+function onScanFailure(error) { /* no loguear cada frame */ }
 
-function onScanFailure(error) {
-  // no loguear cada frame para no saturar
-}
-
-/* Detener scanner */
-async function detenerScannerSilencioso() {
-  if (!html5QrCode) return;
-  try { await html5QrCode.stop(); } catch(e){}
-  try { html5QrCode.clear(); } catch(e){}
-  html5QrCode = null;
-  scannerActivo = false;
-}
-
-/* Pausar / reanudar */
+/* --- Pausar / reanudar --- */
 async function toggleScanner() {
-  if (!html5QrCode) {
-    iniciarScannerTrasera();
-    return;
-  }
+  if (!html5QrCode) { iniciarScannerTrasera(); return; }
   if (scannerActivo) {
     try {
       if (html5QrCode.pause) await html5QrCode.pause(true);
@@ -235,8 +235,64 @@ async function toggleScanner() {
   }
 }
 
-/* Registro y tabla */
+/* --- Registro y tabla --- */
 function registrar() {
   const cod = document.getElementById('codigo').value.trim();
   const cantVal = document.getElementById('cantidad').value;
-  const cant = parseInt
+  const cant = parseInt(cantVal, 10);
+  if (!cod) return alert('Escanea un código primero');
+  if (!cantVal || isNaN(cant) || cant <= 0) return alert('Introduce una cantidad válida (mayor que 0)');
+
+  const existente = inventario.find(i => i.Codigo === cod);
+  if (existente) existente.Cantidad = Number(existente.Cantidad) + cant;
+  else inventario.push({ Codigo: cod, Cantidad: cant });
+
+  localStorage.setItem('datos_inv', JSON.stringify(inventario));
+  try { new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play().catch(()=>{}); } catch(e){}
+  if (navigator.vibrate) navigator.vibrate([40,20,40]);
+
+  document.getElementById('codigo').value = '';
+  document.getElementById('cantidad').value = '';
+  document.getElementById('cantidad').focus();
+  actualizarTabla();
+  log('Registrado: ' + cod + ' x' + cant);
+}
+
+function actualizarTabla() {
+  const tbody = document.querySelector('#tablaInventario tbody');
+  tbody.innerHTML = '';
+  [...inventario].slice().reverse().forEach(item => {
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td'); td1.textContent = item.Codigo;
+    const td2 = document.createElement('td'); td2.textContent = item.Cantidad;
+    tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+  });
+  document.getElementById('totalReg').innerText = inventario.length;
+  const suma = inventario.reduce((s, it) => s + Number(it.Cantidad), 0);
+  document.getElementById('sumaTotal').innerText = suma;
+}
+
+function exportar() {
+  if (!inventario.length) return alert('No hay datos para exportar');
+  const datos = inventario.map(i => ({ Codigo: i.Codigo, Cantidad: Number(i.Cantidad) }));
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(datos, { header: ['Codigo','Cantidad'] });
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+  const fecha = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  const filename = `Inventario_Dogma_${fecha}.xlsx`;
+  XLSX.writeFile(wb, filename);
+  log('Exportado a ' + filename);
+}
+
+function borrarTodo() {
+  if (!confirm('¿Borrar todo el inventario? Esta acción no se puede deshacer.')) return;
+  inventario = [];
+  localStorage.removeItem('datos_inv');
+  actualizarTabla();
+  document.getElementById('codigo').value = '';
+  document.getElementById('cantidad').value = '';
+  log('Inventario borrado');
+}
+</script>
+</body>
+</html>
