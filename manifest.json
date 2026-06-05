@@ -1,11 +1,14 @@
 {
-  "name": "JLSG",
-  "short_name": "Dogma",
+  "name": "JLSG Inventario",
+  "short_name": "JLSG",
   "start_url": "/escaner/",
   "display": "standalone",
   "background_color": "#111111",
   "theme_color": "#111111",
-  "description": "APP DE INVENTARIO",
+  "orientation": "portrait",
+  "id": "/escaner/",
+  "description": "App de inventario industrial",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/escaner/launchericon-192x192.png",
