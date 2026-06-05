@@ -1,411 +1,341 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Inventario Industrial</title>
-
 <style>
-    body {
-        margin: 0;
-        font-family: Arial, sans-serif;
-        background: #111;
-        color: #fff;
-        text-align: center;
-    }
-
-    #video {
-        width: 100%;
-        max-height: 40vh;
-        background: #000;
-    }
-
-    #status {
-        font-size: 1.4rem;
-        padding: 10px;
-        background: #222;
-        margin-bottom: 10px;
-    }
-
-    button {
-        width: 90%;
-        padding: 15px;
-        margin: 8px 0;
-        font-size: 1.2rem;
-        border: none;
-        border-radius: 8px;
-        background: #007bff;
-        color: white;
-    }
-
-    #fileInput {
-        margin: 15px 0;
-    }
-
-    #tabla {
-        width: 100%;
-        margin-top: 20px;
-        font-size: 1.1rem;
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-    }
-
-    th, td {
-        border: 1px solid #444;
-        padding: 8px;
-    }
-
-    th {
-        background: #333;
-    }
-
-    #cantidadInput {
-        width: 80px;
-        font-size: 1.2rem;
-        padding: 5px;
-    }
-
-    #pantallaSesion {
-        padding: 20px;
-        background: #222;
-    }
-
-    #ubicacionInput {
-        width: 90%;
-        padding: 10px;
-        font-size: 1.2rem;
-        margin-top: 10px;
-        border-radius: 6px;
-        border: none;
-    }
-
-    /* Botón invisible para desbloquear audio */
-    #unlockAudioBtn {
-        opacity: 0;
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 1px;
-        height: 1px;
-        pointer-events: none;
-    }
+  body { margin:0; font-family:Arial, sans-serif; background:#111; color:#fff; text-align:center; }
+  #video { width:100%; max-height:40vh; background:#000; }
+  #status { font-size:1.1rem; padding:10px; background:#222; margin-bottom:10px; }
+  button { width:90%; padding:12px; margin:8px 0; font-size:1.05rem; border:none; border-radius:8px; background:#007bff; color:#fff; }
+  #fileInput { margin:15px 0; }
+  #tabla { width:100%; margin-top:18px; font-size:1.02rem; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  th, td { border:1px solid #444; padding:8px; }
+  th { background:#333; }
+  #cantidadInput { width:80px; font-size:1.05rem; padding:5px; }
+  #pantallaSesion { padding:18px; background:#222; }
+  #ubicacionInput { width:90%; padding:10px; font-size:1.05rem; margin-top:10px; border-radius:6px; border:none; }
+  #soundIndicator { position:fixed; top:10px; right:10px; background:#222; border:1px solid #444; padding:6px 8px; border-radius:6px; font-size:0.9rem; display:flex; align-items:center; gap:8px; }
+  #soundDot { width:10px; height:10px; border-radius:50%; background:#800; box-shadow:none; transition:all .18s ease; }
+  #soundLabel { font-size:0.9rem; color:#ccc; }
+  .green { background:#0f0 !important; box-shadow:0 0 6px #0f0; }
 </style>
 </head>
-
 <body>
 
-<!-- BOTÓN INVISIBLE PARA DESBLOQUEAR AUDIO -->
-<button id="unlockAudioBtn">unlock</button>
-
-<!-- ============================
-     PANTALLA DE SESIÓN
-============================= -->
-<div id="pantallaSesion">
-    <h2>📍 Configurar sesión</h2>
-    <p>¿Quieres usar ubicación en esta sesión?</p>
-
-    <button onclick="iniciarSesion(true)">Sí, usar ubicación</button>
-    <button onclick="iniciarSesion(false)" style="background:#555;">No usar ubicación</button>
-
-    <div id="campoUbicacion" style="display:none;">
-        <h3>Introduce ubicación:</h3>
-        <input type="text" id="ubicacionInput" placeholder="Ej: Pasillo 3B" />
-        <button onclick="confirmarUbicacion()">Confirmar ubicación</button>
-    </div>
+<!-- Indicador discreto de sonido -->
+<div id="soundIndicator" aria-hidden="true" style="display:none;">
+  <div id="soundDot"></div>
+  <div id="soundLabel">Sonido inactivo</div>
 </div>
 
-<!-- ============================
-     APP PRINCIPAL
-============================= -->
+<!-- PANTALLA DE SESIÓN -->
+<div id="pantallaSesion">
+  <h2>📍 Configurar sesión</h2>
+  <p>¿Quieres usar ubicación en esta sesión?</p>
+  <button id="btnSiUbic" onclick="iniciarSesion(true)">Sí, usar ubicación</button>
+  <button id="btnNoUbic" onclick="iniciarSesion(false)" style="background:#555;">No usar ubicación</button>
+
+  <div id="campoUbicacion" style="display:none;">
+    <h3>Introduce ubicación:</h3>
+    <input type="text" id="ubicacionInput" placeholder="Ej: Pasillo 3B" />
+    <button onclick="confirmarUbicacion()">Confirmar ubicación</button>
+  </div>
+</div>
+
+<!-- APP PRINCIPAL -->
 <div id="app" style="display:none;">
-
-<h2>📦 Inventario Industrial</h2>
-
-<div id="status">Cargando cámara…</div>
-
-<video id="video" autoplay playsinline></video>
-
-<hr>
-
-<h3>📁 Cargar maestro CSV</h3>
-<input type="file" id="fileInput" accept=".csv" />
-
-<h3>📥 Registro</h3>
-Cantidad: <input type="number" id="cantidadInput" value="1" min="1" />
-
-<div id="descripcionProducto" style="margin-top:10px; font-size:1.3rem; color:#0f0;"></div>
-
-<button id="btnRegistrar">Registrar</button>
-
-<hr>
-
-<h3>📄 Inventario actual</h3>
-<div id="tabla"></div>
-
-<button id="btnExportar">Exportar CSV</button>
-<button id="btnLimpiar" style="background:#b30000;">Limpiar inventario</button>
-
+  <h2>📦 Inventario Industrial</h2>
+  <div id="status">Esperando configuración de sesión…</div>
+  <video id="video" autoplay playsinline></video>
+  <hr>
+  <h3>📁 Cargar maestro CSV</h3>
+  <input type="file" id="fileInput" accept=".csv" />
+  <h3>📥 Registro</h3>
+  Cantidad: <input type="number" id="cantidadInput" value="1" min="1" />
+  <div id="descripcionProducto" style="margin-top:10px; font-size:1.05rem; color:#0f0;"></div>
+  <button id="btnRegistrar">Registrar</button>
+  <hr>
+  <h3>📄 Inventario actual</h3>
+  <div id="tabla"></div>
+  <button id="btnExportar">Exportar CSV</button>
+  <button id="btnLimpiar" style="background:#b30000;">Limpiar inventario</button>
 </div>
 
 <script>
 /* ------------------------------
    VARIABLES GLOBALES
 --------------------------------*/
-let video = document.getElementById("video");
-let statusDiv = document.getElementById("status");
-let descripcionDiv = document.getElementById("descripcionProducto");
+const video = document.getElementById('video');
+const statusDiv = document.getElementById('status');
+const descripcionDiv = document.getElementById('descripcionProducto');
+const soundIndicator = document.getElementById('soundIndicator');
+const soundDot = document.getElementById('soundDot');
+const soundLabel = document.getElementById('soundLabel');
 
-let maestro = {}; 
-let inventario = []; 
+let maestro = {};
+let inventario = [];
 
-let ultimoCodigo = "";
+let ultimoCodigo = '';
 let detector = null;
 let puedeEscanear = true;
 
 let sesionConUbicacion = false;
-let ubicacionActual = "";
+let ubicacionActual = '';
 
 /* ------------------------------
-   SONIDOS (Base64)
+   AUDIO (WebAudio) Y DESBLOQUEO
 --------------------------------*/
-const beepScan = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
-const beepOk   = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
+let audioCtx = null;
+let audioUnlocked = false;
+
+function crearAudioContext() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+/* desbloquea audio con gesto del usuario; se llama desde los botones de sesión */
+async function unlockAudioIfNeeded() {
+  if (audioUnlocked) return;
+  crearAudioContext();
+  try {
+    await audioCtx.resume();
+    audioUnlocked = true;
+    // confirmación sonora breve
+    playBeep(1200, 0.06);
+    setTimeout(()=> playBeep(900, 0.06, 'square'), 120);
+    // mostrar indicador visual discreto
+    soundIndicator.style.display = 'flex';
+    soundDot.classList.add('green');
+    soundLabel.textContent = 'Sonido activo';
+  } catch (e) {
+    console.warn('No se pudo activar audio:', e);
+    // mostrar indicador pero en rojo
+    soundIndicator.style.display = 'flex';
+    soundDot.classList.remove('green');
+    soundLabel.textContent = 'Sonido no activo';
+  }
+}
+
+/* reproducir beep */
+function playBeep(freq = 1000, duration = 0.08, type = 'sine') {
+  if (!audioCtx || !audioUnlocked) return;
+  try {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.value = 0.0001;
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.25, now + 0.01);
+    o.start(now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    o.stop(now + duration + 0.02);
+  } catch (e) {
+    console.warn('playBeep error', e);
+  }
+}
 
 /* ------------------------------
-   DESBLOQUEAR AUDIO
---------------------------------*/
-document.getElementById("unlockAudioBtn").addEventListener("click", () => {
-    beepScan.play().catch(()=>{});
-    beepOk.play().catch(()=>{});
-});
-
-/* Se pulsa automáticamente al cargar */
-window.addEventListener("load", () => {
-    document.getElementById("unlockAudioBtn").click();
-});
-
-/* ------------------------------
-   SESIÓN: SÍ / NO UBICACIÓN
+   SESIÓN: SÍ / NO UBICACIÓN (gesto desbloquea audio)
 --------------------------------*/
 function iniciarSesion(conUbicacion) {
-    sesionConUbicacion = conUbicacion;
-
-    if (conUbicacion) {
-        document.getElementById("campoUbicacion").style.display = "block";
-    } else {
-        document.getElementById("pantallaSesion").style.display = "none";
-        document.getElementById("app").style.display = "block";
-        iniciarCamara();
-    }
+  // desbloqueo de audio con el gesto del usuario
+  unlockAudioIfNeeded();
+  sesionConUbicacion = conUbicacion;
+  if (conUbicacion) {
+    document.getElementById('campoUbicacion').style.display = 'block';
+  } else {
+    document.getElementById('pantallaSesion').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    statusDiv.textContent = 'Cargando cámara…';
+    iniciarCamara();
+  }
 }
 
 function confirmarUbicacion() {
-    const txt = document.getElementById("ubicacionInput").value.trim();
-    if (txt === "") {
-        alert("Introduce una ubicación válida.");
-        return;
-    }
-
-    ubicacionActual = txt;
-
-    document.getElementById("pantallaSesion").style.display = "none";
-    document.getElementById("app").style.display = "block";
-
-    iniciarCamara();
+  // desbloqueo de audio con el gesto del usuario
+  unlockAudioIfNeeded();
+  const txt = document.getElementById('ubicacionInput').value.trim();
+  if (txt === '') {
+    alert('Introduce una ubicación válida.');
+    return;
+  }
+  ubicacionActual = txt;
+  document.getElementById('pantallaSesion').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  statusDiv.textContent = 'Cargando cámara…';
+  iniciarCamara();
 }
 
 /* ------------------------------
    INICIAR CÁMARA TRASERA
 --------------------------------*/
 async function iniciarCamara() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: 'environment' } } });
+    video.srcObject = stream;
+    statusDiv.textContent = 'Cámara activa';
+  } catch (e) {
+    // fallback sin exact
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { exact: "environment" } }
-        });
-        video.srcObject = stream;
-        statusDiv.textContent = "Cámara activa";
-    } catch (e) {
-        statusDiv.textContent = "Error iniciando cámara";
-        console.error(e);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = stream;
+      statusDiv.textContent = 'Cámara activa (fallback)';
+    } catch (err) {
+      statusDiv.textContent = 'Error iniciando cámara';
+      console.error(err);
     }
+  }
 }
 
 /* ------------------------------
    CARGAR MAESTRO CSV
 --------------------------------*/
-document.getElementById("fileInput").addEventListener("change", function (e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function (evt) {
-        const lines = evt.target.result.split("\n");
-        maestro = {};
-
-        for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(",");
-            if (cols.length >= 2) {
-                const codigo = cols[0].trim();
-                const descripcion = cols[1].trim();
-                maestro[codigo] = descripcion;
-            }
-        }
-
-        alert("Maestro cargado correctamente. Productos: " + Object.keys(maestro).length);
-    };
-
-    reader.readAsText(file);
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const text = evt.target.result.replace(/\r/g,'');
+    const lines = text.split('\n').filter(l => l.trim() !== '');
+    maestro = {};
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',');
+      if (cols.length >= 2) {
+        const codigo = cols[0].trim();
+        const descripcion = cols[1].trim();
+        if (codigo) maestro[codigo] = descripcion;
+      }
+    }
+    alert('Maestro cargado correctamente. Productos: ' + Object.keys(maestro).length);
+  };
+  reader.readAsText(file);
 });
 
 /* ------------------------------
    PREPARAR DETECTOR
 --------------------------------*/
 async function prepararDetector() {
-    if ("BarcodeDetector" in window) {
-        detector = new BarcodeDetector({
-            formats: ["ean_13", "code_128", "qr_code"]
-        });
-    } else {
-        alert("BarcodeDetector no soportado.");
-    }
+  if ('BarcodeDetector' in window) {
+    detector = new BarcodeDetector({ formats: ['ean_13','code_128','qr_code'] });
+  } else {
+    alert('BarcodeDetector no soportado en este dispositivo.');
+  }
 }
-
 prepararDetector();
 
 /* ------------------------------
-   ESCANEO AUTOMÁTICO
+   ESCANEO AUTOMÁTICO (debounce por código)
 --------------------------------*/
+const lastDetected = new Map();
+const DETECT_DEBOUNCE_MS = 800;
+
 setInterval(async () => {
-    if (!detector || !puedeEscanear) return;
-
-    try {
-        const barcodes = await detector.detect(video);
-        if (barcodes.length > 0) {
-            const codigo = barcodes[0].rawValue;
-
-            if (codigo !== ultimoCodigo) {
-                ultimoCodigo = codigo;
-                procesarCodigo(codigo);
-                beepScan.play();   // 🔊 sonido al escanear
-            }
-        }
-    } catch (e) {
-        console.error(e);
+  if (!detector || !puedeEscanear) return;
+  try {
+    const barcodes = await detector.detect(video);
+    if (barcodes.length > 0) {
+      const codigo = barcodes[0].rawValue;
+      const now = Date.now();
+      const last = lastDetected.get(codigo) || 0;
+      if (now - last > DETECT_DEBOUNCE_MS) {
+        lastDetected.set(codigo, now);
+        ultimoCodigo = codigo;
+        procesarCodigo(codigo);
+        if (audioUnlocked) playBeep(1200, 0.06);
+      }
     }
-}, 300);
+  } catch (e) {
+    console.error(e);
+  }
+}, 250);
 
 /* ------------------------------
    PROCESAR CÓDIGO
 --------------------------------*/
 function procesarCodigo(codigo) {
-    if (!maestro[codigo]) {
-        descripcionDiv.style.color = "#f00";
-        descripcionDiv.textContent = "❌ Código no encontrado en maestro";
-        return;
-    }
-
-    descripcionDiv.style.color = "#0f0";
-    descripcionDiv.textContent = "✔ " + maestro[codigo];
+  if (!maestro[codigo]) {
+    descripcionDiv.style.color = '#f00';
+    descripcionDiv.textContent = '❌ Código no encontrado en maestro';
+    return;
+  }
+  descripcionDiv.style.color = '#0f0';
+  descripcionDiv.textContent = '✔ ' + maestro[codigo];
 }
 
 /* ------------------------------
-   REGISTRAR INVENTARIO
+   REGISTRAR INVENTARIO (suma si existe)
 --------------------------------*/
-document.getElementById("btnRegistrar").addEventListener("click", () => {
-    if (!ultimoCodigo || !maestro[ultimoCodigo]) {
-        alert("No hay código válido escaneado.");
-        return;
-    }
-
-    const cantidad = parseInt(document.getElementById("cantidadInput").value);
-
-    // 🔥 Si ya existe, sumar cantidad
-    const existente = inventario.find(item => item.codigo === ultimoCodigo);
-
-    if (existente) {
-        existente.cantidad += cantidad;
-    } else {
-        inventario.push({
-            codigo: ultimoCodigo,
-            descripcion: maestro[ultimoCodigo],
-            cantidad,
-            ubicacion: sesionConUbicacion ? ubicacionActual : ""
-        });
-    }
-
-    beepOk.play();  // 🔊 sonido al registrar
-
-    actualizarTabla();
-    descripcionDiv.textContent = "";
-    ultimoCodigo = "";
+document.getElementById('btnRegistrar').addEventListener('click', () => {
+  if (!ultimoCodigo || !maestro[ultimoCodigo]) {
+    alert('No hay código válido escaneado.');
+    return;
+  }
+  const cantidad = parseInt(document.getElementById('cantidadInput').value) || 1;
+  const existente = inventario.find(item => item.codigo === ultimoCodigo);
+  if (existente) {
+    existente.cantidad = Number(existente.cantidad) + Number(cantidad);
+  } else {
+    inventario.push({
+      codigo: ultimoCodigo,
+      descripcion: maestro[ultimoCodigo],
+      cantidad,
+      ubicacion: sesionConUbicacion ? ubicacionActual : ''
+    });
+  }
+  if (audioUnlocked) playBeep(900, 0.09, 'square');
+  actualizarTabla();
+  descripcionDiv.textContent = '';
+  ultimoCodigo = '';
 });
 
 /* ------------------------------
    TABLA
 --------------------------------*/
 function actualizarTabla() {
-    let html = `
-        <table>
-            <tr>
-                <th>Código</th>
-                <th>Descripción</th>
-                <th>Cantidad</th>
-                ${sesionConUbicacion ? "<th>Ubicación</th>" : ""}
-            </tr>
-    `;
-
-    inventario.forEach(item => {
-        html += `
-            <tr>
-                <td>${item.codigo}</td>
-                <td>${item.descripcion}</td>
-                <td>${item.cantidad}</td>
-                ${sesionConUbicacion ? `<td>${item.ubicacion}</td>` : ""}
-            </tr>
-        `;
-    });
-
-    html += "</table>";
-    document.getElementById("tabla").innerHTML = html;
+  let html = '<table><tr><th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
+  inventario.forEach(item => {
+    html += `<tr><td>${item.codigo}</td><td>${item.descripcion}</td><td>${item.cantidad}</td>` + (sesionConUbicacion ? `<td>${item.ubicacion}</td>` : '') + '</tr>';
+  });
+  html += '</table>';
+  document.getElementById('tabla').innerHTML = html;
 }
 
 /* ------------------------------
    EXPORTAR CSV
 --------------------------------*/
-document.getElementById("btnExportar").addEventListener("click", () => {
-    let csv = sesionConUbicacion
-        ? "codigo,descripcion,cantidad,ubicacion\n"
-        : "codigo,descripcion,cantidad\n";
-
-    inventario.forEach(item => {
-        csv += sesionConUbicacion
-            ? `${item.codigo},${item.descripcion},${item.cantidad},${item.ubicacion}\n`
-            : `${item.codigo},${item.descripcion},${item.cantidad}\n`;
-    });
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "inventario.csv";
-    a.click();
+document.getElementById('btnExportar').addEventListener('click', () => {
+  let csv = sesionConUbicacion ? 'codigo,descripcion,cantidad,ubicacion\n' : 'codigo,descripcion,cantidad\n';
+  inventario.forEach(item => {
+    csv += sesionConUbicacion ? `${item.codigo},${item.descripcion},${item.cantidad},${item.ubicacion}\n` : `${item.codigo},${item.descripcion},${item.cantidad}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'inventario.csv';
+  a.click();
 });
 
 /* ------------------------------
    LIMPIAR
 --------------------------------*/
-document.getElementById("btnLimpiar").addEventListener("click", () => {
-    if (confirm("¿Seguro que deseas borrar todo el inventario?")) {
-        inventario = [];
-        actualizarTabla();
-    }
+document.getElementById('btnLimpiar').addEventListener('click', () => {
+  if (confirm('¿Seguro que deseas borrar todo el inventario?')) {
+    inventario = [];
+    actualizarTabla();
+  }
 });
-</script>
 
+/* ------------------------------
+   Inicializar contexto de audio en background (no resume)
+--------------------------------*/
+crearAudioContext();
+</script>
 </body>
 </html>
