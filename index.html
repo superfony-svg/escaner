@@ -156,6 +156,12 @@ let sesionConUbicacion = false;
 let ubicacionActual = "";
 
 /* ------------------------------
+   SONIDOS (Base64)
+--------------------------------*/
+const beepScan = new Audio("data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA...");
+const beepOk = new Audio("data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA...");
+
+/* ------------------------------
    SESIÓN: SÍ / NO UBICACIÓN
 --------------------------------*/
 function iniciarSesion(conUbicacion) {
@@ -257,6 +263,7 @@ setInterval(async () => {
             if (codigo !== ultimoCodigo) {
                 ultimoCodigo = codigo;
                 procesarCodigo(codigo);
+                beepScan.play();   // 🔊 sonido al escanear
             }
         }
     } catch (e) {
@@ -289,12 +296,21 @@ document.getElementById("btnRegistrar").addEventListener("click", () => {
 
     const cantidad = parseInt(document.getElementById("cantidadInput").value);
 
-    inventario.push({
-        codigo: ultimoCodigo,
-        descripcion: maestro[ultimoCodigo],
-        cantidad,
-        ubicacion: sesionConUbicacion ? ubicacionActual : ""
-    });
+    // 🔥 Si ya existe, sumar cantidad
+    const existente = inventario.find(item => item.codigo === ultimoCodigo);
+
+    if (existente) {
+        existente.cantidad += cantidad;
+    } else {
+        inventario.push({
+            codigo: ultimoCodigo,
+            descripcion: maestro[ultimoCodigo],
+            cantidad,
+            ubicacion: sesionConUbicacion ? ubicacionActual : ""
+        });
+    }
+
+    beepOk.play();  // 🔊 sonido al registrar
 
     actualizarTabla();
     descripcionDiv.textContent = "";
