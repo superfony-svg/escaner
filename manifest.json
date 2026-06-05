@@ -1,0 +1,13 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "JLSG",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "Dogma",
+  "start_url": "/",
+  "theme_color": "#ffffff",
+  "description": "APP DE INVENTARIO",
+  "id": "com.dogma.inventario"
+}
