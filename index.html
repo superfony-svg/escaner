@@ -1,332 +1,368 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Inventario Dogma — Escáner + Maestro CSV</title>
-
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inventario Industrial</title>
 
 <style>
-  body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f9;padding:12px;display:flex;justify-content:center}
-  .card{width:100%;max-width:520px;background:#fff;padding:14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-  #videoWrap{background:#000;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;height:320px}
-  video{width:100%;height:100%;object-fit:cover}
-  #indicator{margin-top:10px;font-weight:700;color:#2b7a2b;height:22px}
-  label{display:block;margin-top:10px;font-weight:600}
-  input,button{width:100%;padding:12px;margin-top:6px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box}
-  .row{display:flex;gap:8px;margin-top:10px}
-  .row button{flex:1;border:0;color:#fff;font-weight:700;cursor:pointer}
-  .green{background:#28a745}.blue{background:#007bff}.yellow{background:#f0ad4e;color:#000}.red{background:#dc3545}
-  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
-  th,td{border:1px solid #eaeaea;padding:8px;text-align:left}
-  th{background:#fafafa}
-  #csvStatus{margin-top:6px;color:#555;font-size:14px;min-height:18px}
-  @media(max-width:520px){#videoWrap{height:220px}}
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #111;
+        color: #fff;
+        text-align: center;
+    }
+
+    #video {
+        width: 100%;
+        max-height: 40vh;
+        background: #000;
+    }
+
+    #status {
+        font-size: 1.4rem;
+        padding: 10px;
+        background: #222;
+        margin-bottom: 10px;
+    }
+
+    button {
+        width: 90%;
+        padding: 15px;
+        margin: 8px 0;
+        font-size: 1.2rem;
+        border: none;
+        border-radius: 8px;
+        background: #007bff;
+        color: white;
+    }
+
+    #fileInput {
+        margin: 15px 0;
+    }
+
+    #tabla {
+        width: 100%;
+        margin-top: 20px;
+        font-size: 1.1rem;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+
+    th, td {
+        border: 1px solid #444;
+        padding: 8px;
+    }
+
+    th {
+        background: #333;
+    }
+
+    #cantidadInput {
+        width: 80px;
+        font-size: 1.2rem;
+        padding: 5px;
+    }
+
+    #pantallaSesion {
+        padding: 20px;
+        background: #222;
+    }
+
+    #ubicacionInput {
+        width: 90%;
+        padding: 10px;
+        font-size: 1.2rem;
+        margin-top: 10px;
+        border-radius: 6px;
+        border: none;
+    }
 </style>
 </head>
+
 <body>
-<div class="card">
-  <h2>Inventario Dogma — Escáner</h2>
 
-  <!-- CARGA DE MAESTRO CSV -->
-  <label for="csvInput"><strong>📤 Cargar maestro de artículos (CSV)</strong></label>
-  <input type="file" id="csvInput" accept=".csv">
-  <div id="csvStatus"></div>
+<!-- ============================
+     PANTALLA DE SESIÓN
+============================= -->
+<div id="pantallaSesion">
+    <h2>📍 Configurar sesión</h2>
+    <p>¿Quieres usar ubicación en esta sesión?</p>
 
-  <div id="videoWrap">
-    <video id="video" autoplay playsinline muted></video>
-  </div>
+    <button onclick="iniciarSesion(true)">Sí, usar ubicación</button>
+    <button onclick="iniciarSesion(false)" style="background:#555;">No usar ubicación</button>
 
-  <div id="indicator">Escaneando…</div>
+    <div id="campoUbicacion" style="display:none;">
+        <h3>Introduce ubicación:</h3>
+        <input type="text" id="ubicacionInput" placeholder="Ej: Pasillo 3B" />
+        <button onclick="confirmarUbicacion()">Confirmar ubicación</button>
+    </div>
+</div>
 
-  <!-- Campo oculto para almacenar internamente el código -->
-  <input id="codigoHidden" type="hidden">
+<!-- ============================
+     APP PRINCIPAL
+============================= -->
+<div id="app" style="display:none;">
 
-  <label for="cantidad">Cantidad</label>
-  <input id="cantidad" type="number" min="1" placeholder="Cantidad">
+<h2>📦 Inventario Industrial</h2>
 
-  <div class="row">
-    <button id="btnRegistrar" class="green">📥 Registrar</button>
-    <button id="btnToggle" class="blue">⏸️ Pausar</button>
-  </div>
+<div id="status">Cargando cámara…</div>
 
-  <div class="row">
-    <button id="btnExport" class="yellow">🍏 Exportar CSV</button>
-    <button id="btnClear" class="red">🧹 Borrar todo</button>
-  </div>
+<video id="video" autoplay playsinline></video>
 
-  <div style="display:flex;justify-content:space-between;margin-top:10px">
-    <div><strong>Registros:</strong> <span id="totalReg">0</span></div>
-    <div><strong>Total Cantidad:</strong> <span id="sumaTotal">0</span></div>
-  </div>
+<hr>
 
-  <table id="tablaInventario">
-    <thead><tr><th>Código</th><th>Descripción</th><th>Cantidad</th></tr></thead>
-    <tbody></tbody>
-  </table>
+<h3>📁 Cargar maestro CSV</h3>
+<input type="file" id="fileInput" accept=".csv" />
+
+<h3>📥 Registro</h3>
+Cantidad: <input type="number" id="cantidadInput" value="1" min="1" />
+
+<div id="descripcionProducto" style="margin-top:10px; font-size:1.3rem; color:#0f0;"></div>
+
+<button id="btnRegistrar">Registrar</button>
+
+<hr>
+
+<h3>📄 Inventario actual</h3>
+<div id="tabla"></div>
+
+<button id="btnExportar">Exportar CSV</button>
+<button id="btnLimpiar" style="background:#b30000;">Limpiar inventario</button>
+
 </div>
 
 <script>
-/* ============================
-   VARIABLES GENERALES
-   ============================ */
-let video = document.getElementById('video');
-let indicator = document.getElementById('indicator');
-let codigoHidden = document.getElementById('codigoHidden');
-let cantidadEl = document.getElementById('cantidad');
-let csvStatus = document.getElementById('csvStatus');
+/* ------------------------------
+   VARIABLES GLOBALES
+--------------------------------*/
+let video = document.getElementById("video");
+let statusDiv = document.getElementById("status");
+let descripcionDiv = document.getElementById("descripcionProducto");
 
-let inventario = JSON.parse(localStorage.getItem('datos_inv')) || [];
-let maestro = {}; // maestro[codigo] = { descripcion }
+let maestro = {}; 
+let inventario = []; 
 
-let stream = null;
-let scanning = false;
-let lastDecoded = null;
-let lastTime = 0;
-const DEBOUNCE = 1000;
+let ultimoCodigo = "";
+let detector = null;
+let puedeEscanear = true;
 
-/* ============================
-   UTILIDADES
-   ============================ */
-function vibrar(){ if(navigator.vibrate) navigator.vibrate(60); }
-function beep(){ try{ new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play(); }catch(e){} }
-function beepError(){ try{ new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play(); }catch(e){} }
+let sesionConUbicacion = false;
+let ubicacionActual = "";
 
-function actualizarTabla(){
-  const tbody = document.querySelector('#tablaInventario tbody');
-  tbody.innerHTML = '';
-  [...inventario].slice().reverse().forEach(i=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${i.Codigo}</td><td>${i.Descripcion || ""}</td><td>${i.Cantidad}</td>`;
-    tbody.appendChild(tr);
-  });
-  document.getElementById('totalReg').textContent = inventario.length;
-  document.getElementById('sumaTotal').textContent = inventario.reduce((a,b)=>a+Number(b.Cantidad),0);
+/* ------------------------------
+   SESIÓN: SÍ / NO UBICACIÓN
+--------------------------------*/
+function iniciarSesion(conUbicacion) {
+    sesionConUbicacion = conUbicacion;
+
+    if (conUbicacion) {
+        document.getElementById("campoUbicacion").style.display = "block";
+    } else {
+        document.getElementById("pantallaSesion").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        iniciarCamara();
+    }
 }
 
-/* ============================
-   CARGA DE MAESTRO CSV
-   Formato: codigo,descripcion
-   ============================ */
-document.getElementById('csvInput').addEventListener('change', function(e){
-  const file = e.target.files[0];
-  if(!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function(evt){
-    const text = evt.target.result;
-    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-    if(!lines.length){
-      csvStatus.textContent = "❌ El archivo está vacío";
-      return;
+function confirmarUbicacion() {
+    const txt = document.getElementById("ubicacionInput").value.trim();
+    if (txt === "") {
+        alert("Introduce una ubicación válida.");
+        return;
     }
 
-    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
-    const idxCodigo = header.indexOf('codigo');
-    const idxDesc   = header.indexOf('descripcion');
+    ubicacionActual = txt;
 
-    if(idxCodigo === -1 || idxDesc === -1){
-      csvStatus.textContent = "❌ El CSV debe tener columnas: codigo, descripcion";
-      maestro = {};
-      return;
+    document.getElementById("pantallaSesion").style.display = "none";
+    document.getElementById("app").style.display = "block";
+
+    iniciarCamara();
+}
+
+/* ------------------------------
+   INICIAR CÁMARA TRASERA
+--------------------------------*/
+async function iniciarCamara() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: "environment" } }
+        });
+        video.srcObject = stream;
+        statusDiv.textContent = "Cámara activa";
+    } catch (e) {
+        statusDiv.textContent = "Error iniciando cámara";
+        console.error(e);
     }
+}
 
-    maestro = {};
-    for(let i=1; i<lines.length; i++){
-      const row = lines[i].split(',');
-      if(row.length < 2) continue;
-      const codigo = row[idxCodigo].trim();
-      const descripcion = row[idxDesc].trim();
-      if(!codigo) continue;
-      maestro[codigo] = { descripcion };
-    }
+/* ------------------------------
+   CARGAR MAESTRO CSV
+--------------------------------*/
+document.getElementById("fileInput").addEventListener("change", function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    csvStatus.textContent = `✔️ Maestro cargado: ${Object.keys(maestro).length} artículos`;
-  };
+    const reader = new FileReader();
+    reader.onload = function (evt) {
+        const lines = evt.target.result.split("\n");
+        maestro = {};
 
-  reader.readAsText(file, 'UTF-8');
+        for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(",");
+            if (cols.length >= 2) {
+                const codigo = cols[0].trim();
+                const descripcion = cols[1].trim();
+                maestro[codigo] = descripcion;
+            }
+        }
+
+        alert("Maestro cargado correctamente. Productos: " + Object.keys(maestro).length);
+    };
+
+    reader.readAsText(file);
 });
 
-/* ============================
-   CÁMARA Y ESCANEO
-   ============================ */
-async function stopStream(){
-  if(stream){
-    stream.getTracks().forEach(t=>t.stop());
-    stream=null;
-  }
-  scanning=false;
-  indicator.textContent="Escáner detenido";
+/* ------------------------------
+   PREPARAR DETECTOR
+--------------------------------*/
+async function prepararDetector() {
+    if ("BarcodeDetector" in window) {
+        detector = new BarcodeDetector({
+            formats: ["ean_13", "code_128", "qr_code"]
+        });
+    } else {
+        alert("BarcodeDetector no soportado.");
+    }
 }
 
-async function startStream(constraints){
-  await stopStream();
-  stream = await navigator.mediaDevices.getUserMedia({video:constraints,audio:false});
-  video.srcObject = stream;
-  await video.play();
-  scanning=true;
-  indicator.textContent="Escaneando…";
-  processLoop();
+prepararDetector();
+
+/* ------------------------------
+   ESCANEO AUTOMÁTICO
+--------------------------------*/
+setInterval(async () => {
+    if (!detector || !puedeEscanear) return;
+
+    try {
+        const barcodes = await detector.detect(video);
+        if (barcodes.length > 0) {
+            const codigo = barcodes[0].rawValue;
+
+            if (codigo !== ultimoCodigo) {
+                ultimoCodigo = codigo;
+                procesarCodigo(codigo);
+            }
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}, 300);
+
+/* ------------------------------
+   PROCESAR CÓDIGO
+--------------------------------*/
+function procesarCodigo(codigo) {
+    if (!maestro[codigo]) {
+        descripcionDiv.style.color = "#f00";
+        descripcionDiv.textContent = "❌ Código no encontrado en maestro";
+        return;
+    }
+
+    descripcionDiv.style.color = "#0f0";
+    descripcionDiv.textContent = "✔ " + maestro[codigo];
 }
 
-async function startRearCamera(){
-  try{
-    const tmp = await navigator.mediaDevices.getUserMedia({video:true});
-    tmp.getTracks().forEach(t=>t.stop());
-  }catch(e){
-    indicator.textContent="Permiso de cámara denegado";
-    return;
-  }
+/* ------------------------------
+   REGISTRAR INVENTARIO
+--------------------------------*/
+document.getElementById("btnRegistrar").addEventListener("click", () => {
+    if (!ultimoCodigo || !maestro[ultimoCodigo]) {
+        alert("No hay código válido escaneado.");
+        return;
+    }
 
-  const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
-  const rear = devices.filter(d=>/back|rear|environment|trasera|posterior/i.test(d.label));
-  const ordered = [...rear, ...devices];
+    const cantidad = parseInt(document.getElementById("cantidadInput").value);
 
-  for(const cam of ordered){
-    try{
-      await startStream({deviceId:{exact:cam.deviceId}});
-      return;
-    }catch(e){}
-  }
-
-  try{
-    await startStream({facingMode:{ideal:"environment"}});
-  }catch(e){
-    indicator.textContent="No se pudo iniciar la cámara";
-  }
-}
-
-async function processLoop(){
-  if(!scanning || !stream) return;
-
-  const w = video.videoWidth;
-  const h = video.videoHeight;
-  if(!w || !h){ requestAnimationFrame(processLoop); return; }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video,0,0,w,h);
-
-  if("BarcodeDetector" in window){
-    try{
-      const detector = new BarcodeDetector();
-      const codes = await detector.detect(video);
-      if(codes.length){
-        handleDecoded(codes[0].rawValue);
-      }
-    }catch(e){}
-  }else{
-    const img = ctx.getImageData(0,0,w,h);
-    const qr = jsQR(img.data,w,h);
-    if(qr) handleDecoded(qr.data);
-  }
-
-  requestAnimationFrame(processLoop);
-}
-
-/* ============================
-   MANEJO DEL CÓDIGO DETECTADO
-   ============================ */
-function handleDecoded(text){
-  const now = Date.now();
-  if(text === lastDecoded && now - lastTime < DEBOUNCE) return;
-
-  // Validar contra maestro
-  if(!maestro[text]){
-    indicator.textContent = "❌ Artículo no encontrado";
-    vibrar();
-    beepError();
-    lastDecoded = null;
-    codigoHidden.value = "";
-    return;
-  }
-
-  lastDecoded = text;
-  lastTime = now;
-  codigoHidden.value = "***"; // oculto
-  indicator.textContent = "Código detectado";
-  beep();
-  vibrar();
-}
-
-/* ============================
-   REGISTRO DE INVENTARIO
-   ============================ */
-document.getElementById('btnRegistrar').addEventListener('click',()=>{
-  const cod = lastDecoded;
-  const cant = parseInt(cantidadEl.value,10);
-
-  if(!cod) return alert("Escanea un código válido primero");
-  if(!cant || cant<=0) return alert("Cantidad inválida");
-
-  const desc = maestro[cod] ? maestro[cod].descripcion : "";
-
-  const ex = inventario.find(i=>i.Codigo===cod);
-  if(ex){
-    ex.Cantidad += cant;
-  } else {
     inventario.push({
-      Codigo: cod,
-      Descripcion: desc,
-      Cantidad: cant
+        codigo: ultimoCodigo,
+        descripcion: maestro[ultimoCodigo],
+        cantidad,
+        ubicacion: sesionConUbicacion ? ubicacionActual : ""
     });
-  }
 
-  localStorage.setItem('datos_inv',JSON.stringify(inventario));
-
-  lastDecoded=null;
-  codigoHidden.value="";
-  cantidadEl.value="";
-  cantidadEl.focus();
-  indicator.textContent="Escaneando…";
-
-  actualizarTabla();
-  beep();
-  vibrar();
+    actualizarTabla();
+    descripcionDiv.textContent = "";
+    ultimoCodigo = "";
 });
 
-/* ============================
-   BOTONES: PAUSAR, EXPORTAR, BORRAR
-   ============================ */
-document.getElementById('btnToggle').addEventListener('click',()=>{
-  if(scanning){
-    stopStream();
-    document.getElementById('btnToggle').textContent="▶️ Reanudar";
-  }else{
-    document.getElementById('btnToggle').textContent="⏸️ Pausar";
-    startRearCamera();
-  }
+/* ------------------------------
+   TABLA
+--------------------------------*/
+function actualizarTabla() {
+    let html = `
+        <table>
+            <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Cantidad</th>
+                ${sesionConUbicacion ? "<th>Ubicación</th>" : ""}
+            </tr>
+    `;
+
+    inventario.forEach(item => {
+        html += `
+            <tr>
+                <td>${item.codigo}</td>
+                <td>${item.descripcion}</td>
+                <td>${item.cantidad}</td>
+                ${sesionConUbicacion ? `<td>${item.ubicacion}</td>` : ""}
+            </tr>
+        `;
+    });
+
+    html += "</table>";
+    document.getElementById("tabla").innerHTML = html;
+}
+
+/* ------------------------------
+   EXPORTAR CSV
+--------------------------------*/
+document.getElementById("btnExportar").addEventListener("click", () => {
+    let csv = sesionConUbicacion
+        ? "codigo,descripcion,cantidad,ubicacion\n"
+        : "codigo,descripcion,cantidad\n";
+
+    inventario.forEach(item => {
+        csv += sesionConUbicacion
+            ? `${item.codigo},${item.descripcion},${item.cantidad},${item.ubicacion}\n`
+            : `${item.codigo},${item.descripcion},${item.cantidad}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "inventario.csv";
+    a.click();
 });
 
-document.getElementById('btnClear').addEventListener('click',()=>{
-  if(!confirm("¿Borrar todo el inventario?")) return;
-  inventario=[];
-  localStorage.removeItem('datos_inv');
-  actualizarTabla();
+/* ------------------------------
+   LIMPIAR
+--------------------------------*/
+document.getElementById("btnLimpiar").addEventListener("click", () => {
+    if (confirm("¿Seguro que deseas borrar todo el inventario?")) {
+        inventario = [];
+        actualizarTabla();
+    }
 });
-
-document.getElementById('btnExport').addEventListener('click',()=>{
-  if(!inventario.length) return alert("No hay datos para exportar");
-  const header=["Codigo","Descripcion","Cantidad"];
-  const rows=inventario.map(i=>[i.Codigo, i.Descripcion || "", i.Cantidad]);
-  const csv=[header,...rows].map(r=>r.join(",")).join("\n");
-  const blob=new Blob([csv],{type:"text/csv"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url;
-  a.download="Inventario_Dogma.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-/* ============================
-   INICIO
-   ============================ */
-actualizarTabla();
-startRearCamera();
 </script>
+
 </body>
 </html>
