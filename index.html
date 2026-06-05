@@ -55,16 +55,16 @@
 </div>
 
 <script>
-    // Registro del Service Worker para PWA
+    // Registro del Service Worker corregido
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/escaner/pwabuilder-sw.js')
+            navigator.serviceWorker.register('/pwabuilder-sw.js')
                 .then(reg => console.log('SW registrado', reg))
                 .catch(err => console.log('SW fallo', err));
         });
     }
 
-    /* --- TU LÓGICA ANTERIOR --- */
+    /* --- LÓGICA DE LA APP --- */
     const video = document.getElementById('video');
     const statusDiv = document.getElementById('status');
     const descripcionDiv = document.getElementById('descripcionProducto');
@@ -78,8 +78,7 @@
     function confirmarUbicacion() { unlockAudioIfNeeded(); ubicacionActual = document.getElementById('ubicacionInput').value; document.getElementById('pantallaSesion').style.display = 'none'; document.getElementById('app').style.display = 'block'; iniciarCamara(); }
     async function iniciarCamara() { try { const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); video.srcObject = stream; document.getElementById('pantallaSesion').style.display = 'none'; document.getElementById('app').style.display = 'block'; } catch(e) { alert('Error cámara'); } }
     
-    // ... (Mantén aquí el resto de tus funciones: reader, BarcodeDetector, procesarCodigo, etc.)
-    // He omitido el resto por brevedad, pero mantenlo igual en tu archivo.
+    // (Asegúrate de mantener el resto de tus funciones aquí abajo, hasta el final de tu script original)
 </script>
 </body>
 </html>
