@@ -17,19 +17,14 @@
   #cantidadInput { width:80px; font-size:1.05rem; padding:5px; }
   #pantallaSesion { padding:18px; background:#222; }
   #ubicacionInput { width:90%; padding:10px; font-size:1.05rem; margin-top:10px; border-radius:6px; border:none; }
-  #soundIndicator { position:fixed; top:10px; right:10px; background:#222; border:1px solid #444; padding:6px 8px; border-radius:6px; font-size:0.9rem; display:flex; align-items:center; gap:8px; }
-  #soundDot { width:10px; height:10px; border-radius:50%; background:#800; box-shadow:none; transition:all .18s ease; }
-  #soundLabel { font-size:0.9rem; color:#ccc; }
-  .green { background:#0f0 !important; box-shadow:0 0 6px #0f0; }
+  /* Toast breve opcional (no mostrado por defecto) */
+  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:8px 14px; border-radius:8px; border:1px solid #444; display:none; font-size:0.95rem; }
 </style>
 </head>
 <body>
 
-<!-- Indicador discreto de sonido -->
-<div id="soundIndicator" aria-hidden="true" style="display:none;">
-  <div id="soundDot"></div>
-  <div id="soundLabel">Sonido inactivo</div>
-</div>
+<!-- TOAST BREVE (opcional; no aparece por defecto) -->
+<div id="toast" aria-hidden="true">Sonido activado</div>
 
 <!-- PANTALLA DE SESIÓN -->
 <div id="pantallaSesion">
@@ -71,9 +66,7 @@
 const video = document.getElementById('video');
 const statusDiv = document.getElementById('status');
 const descripcionDiv = document.getElementById('descripcionProducto');
-const soundIndicator = document.getElementById('soundIndicator');
-const soundDot = document.getElementById('soundDot');
-const soundLabel = document.getElementById('soundLabel');
+const toast = document.getElementById('toast');
 
 let maestro = {};
 let inventario = [];
@@ -105,16 +98,11 @@ async function unlockAudioIfNeeded() {
     // confirmación sonora breve
     playBeep(1200, 0.06);
     setTimeout(()=> playBeep(900, 0.06, 'square'), 120);
-    // mostrar indicador visual discreto
-    soundIndicator.style.display = 'flex';
-    soundDot.classList.add('green');
-    soundLabel.textContent = 'Sonido activo';
+    // mostrar toast breve (opcional, profesional y no intrusivo)
+    showToast('Sonido activado', 1100);
   } catch (e) {
     console.warn('No se pudo activar audio:', e);
-    // mostrar indicador pero en rojo
-    soundIndicator.style.display = 'flex';
-    soundDot.classList.remove('green');
-    soundLabel.textContent = 'Sonido no activo';
+    // no mostramos nada visible; el sistema sigue funcionando sin sonido
   }
 }
 
@@ -138,6 +126,13 @@ function playBeep(freq = 1000, duration = 0.08, type = 'sine') {
   } catch (e) {
     console.warn('playBeep error', e);
   }
+}
+
+/* mostrar toast breve */
+function showToast(text, ms = 1000) {
+  toast.textContent = text;
+  toast.style.display = 'block';
+  setTimeout(()=> { toast.style.display = 'none'; }, ms);
 }
 
 /* ------------------------------
